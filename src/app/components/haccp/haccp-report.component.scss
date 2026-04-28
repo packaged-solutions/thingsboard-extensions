@@ -1,0 +1,13 @@
+// File: haccp-report.component.scss
+ 
+.tb-haccp-report {
+    mat-footer-row, mat-row {
+      height: 38px;
+    }
+    mat-header-row {
+      height: 40px;
+    }
+    span.no-data-found {
+      height: calc(100% - 44px);
+    }
+}

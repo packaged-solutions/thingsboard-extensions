@@ -1,0 +1,378 @@
+<div class="alarm-threshold-editor">
+
+  <ng-template #sortArrow let-key>
+    <div class="mat-sort-header-arrow" *ngIf="sortBy === key" [class.sort-arrow-desc]="sortDir === 'desc'">
+      <svg viewBox="0 -960 960 960" focusable="false" aria-hidden="true">
+        <path d="M440-240v-368L296-464l-56-56 240-240 240 240-56 56-144-144v368h-80Z"></path>
+      </svg>
+    </div>
+  </ng-template>
+
+  <div class="toolbar-wrap">
+  <div class="toolbar">
+    <ng-container *ngIf="!searchOpen">
+      <mat-form-field *ngIf="profileGroups.length > 0" class="profile-field dense-field">
+        <mat-label>Device Type</mat-label>
+        <input matInput type="text"
+               [matAutocomplete]="profileAuto"
+               [(ngModel)]="profileSearch"
+               (ngModelChange)="filterProfiles()"
+               (focus)="onProfileInputFocus()">
+        <mat-autocomplete #profileAuto="matAutocomplete"
+                          [displayWith]="displayProfile"
+                          (optionSelected)="onProfileAutoSelected($event)">
+          <mat-option *ngFor="let g of filteredProfileGroups" [value]="g">
+            {{ g.profileName }} ({{ g.devices.length }})
+          </mat-option>
+        </mat-autocomplete>
+      </mat-form-field>
+
+      <span class="toolbar-spacer"></span>
+
+      <button mat-icon-button
+              (click)="openSearch()"
+              [disabled]="!currentGroup"
+              matTooltip="Search devices">
+        <mat-icon>search</mat-icon>
+      </button>
+
+      <button mat-icon-button (click)="refreshData()" [disabled]="loading" matTooltip="Refresh">
+        <mat-icon>refresh</mat-icon>
+      </button>
+    </ng-container>
+
+    <div *ngIf="searchOpen" class="toolbar-search-overlay">
+      <mat-icon class="toolbar-search-icon">search</mat-icon>
+      <input #searchInput type="text"
+             class="toolbar-search-input"
+             [(ngModel)]="deviceSearch"
+             (ngModelChange)="onSearchChange()"
+             placeholder="Search devices or customers">
+      <button mat-icon-button (click)="closeSearch()" matTooltip="Close">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+  </div>
+
+  <mat-toolbar *ngIf="hasSelection()" color="primary" class="selection-toolbar">
+    <span class="selection-info">
+      {{ selectedCount() }} device{{ selectedCount() === 1 ? '' : 's' }} selected
+    </span>
+    <span class="selection-spacer"></span>
+    <button mat-icon-button
+            (click)="openBulkEdit()"
+            matTooltip="Edit selected"
+            matTooltipPosition="above">
+      <mat-icon>edit</mat-icon>
+    </button>
+  </mat-toolbar>
+  </div>
+
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+
+  <div class="body-row">
+    <div class="body-main">
+      <div *ngIf="!loading && profileGroups.length === 0" class="no-data">
+        No devices with configured alarm profiles found.
+      </div>
+
+      <div *ngIf="profileGroups.length > 0 && currentGroup as group" class="content">
+
+        <div class="tab-content">
+
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th class="checkbox-col">
+                    <mat-checkbox [checked]="allSelected"
+                                  (change)="toggleSelectAll($event.checked)">
+                    </mat-checkbox>
+                  </th>
+                  <th class="sortable" (click)="sortByColumn('device')">
+                    Device
+                    <ng-container *ngTemplateOutlet="sortArrow; context: { $implicit: 'device' }"></ng-container>
+                  </th>
+                  <th class="sortable customer-col" (click)="sortByColumn('customer')">
+                    Customer
+                    <ng-container *ngTemplateOutlet="sortArrow; context: { $implicit: 'customer' }"></ng-container>
+                  </th>
+                  <th *ngFor="let t of group.config.thresholds" class="sortable" (click)="sortByColumn(t.key)">
+                    {{ t.label }}<span *ngIf="t.unit"> ({{ t.unit }})</span>
+                    <ng-container *ngTemplateOutlet="sortArrow; context: { $implicit: t.key }"></ng-container>
+                  </th>
+                  <th *ngFor="let dig of group.config.digitals || []" class="sortable" (click)="sortByColumn(dig.enabledAttributeKey)">
+                    {{ dig.label }}
+                    <ng-container *ngTemplateOutlet="sortArrow; context: { $implicit: dig.enabledAttributeKey }"></ng-container>
+                  </th>
+                  <th class="sortable" (click)="sortByColumn('alarmDelay')">
+                    Alarm Delay
+                    <ng-container *ngTemplateOutlet="sortArrow; context: { $implicit: 'alarmDelay' }"></ng-container>
+                  </th>
+                  <th class="sortable" (click)="sortByColumn('offlineAlarmEnabled')">
+                    Offline Alarm
+                    <ng-container *ngTemplateOutlet="sortArrow; context: { $implicit: 'offlineAlarmEnabled' }"></ng-container>
+                  </th>
+                  <th class="sortable" (click)="sortByColumn('inactivityTimeout')">
+                    Timeout (min)
+                    <ng-container *ngTemplateOutlet="sortArrow; context: { $implicit: 'inactivityTimeout' }"></ng-container>
+                  </th>
+                  <th class="sortable count-col" (click)="sortByColumn('emails')" matTooltip="Emails attached">
+                    Emails
+                    <ng-container *ngTemplateOutlet="sortArrow; context: { $implicit: 'emails' }"></ng-container>
+                  </th>
+                  <th class="sortable count-col" (click)="sortByColumn('sms')" matTooltip="SMS numbers attached">
+                    SMS
+                    <ng-container *ngTemplateOutlet="sortArrow; context: { $implicit: 'sms' }"></ng-container>
+                  </th>
+                  <th class="alarms-toggle-col" matTooltip="Alarms enabled">
+                    <mat-icon>notifications</mat-icon>
+                  </th>
+                  <th class="actions-col"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <ng-container *ngFor="let device of pagedDevices">
+                  <tr>
+                    <td class="checkbox-col">
+                      <mat-checkbox [checked]="device.selected"
+                                    (change)="toggleDeviceSelection(device, $event.checked)">
+                      </mat-checkbox>
+                    </td>
+                    <td>{{ device.deviceName }}</td>
+                    <td class="customer-cell" [matTooltip]="device.customerName">{{ device.customerName || '—' }}</td>
+                    <td *ngFor="let t of group.config.thresholds" class="threshold-cell">
+                      <span [class.threshold-empty]="device.attributes[t.key] == null">
+                        {{ device.attributes[t.key] == null ? '—' : device.attributes[t.key] }}
+                      </span>
+                    </td>
+                    <td *ngFor="let dig of group.config.digitals || []" class="threshold-cell">
+                      <span [class.threshold-empty]="!isDigitalConfigured(device, dig)">
+                        {{ digitalSummary(device, dig) }}
+                      </span>
+                    </td>
+                    <td class="threshold-cell">
+                      <span [class.threshold-empty]="device.attributes['alarmDelay'] == null">
+                        {{ device.attributes['alarmDelay'] == null ? '—' : device.attributes['alarmDelay'] }}
+                      </span>
+                    </td>
+                    <td class="offline-cell">
+                      <mat-checkbox
+                          [checked]="offlineEnabled(device)"
+                          [indeterminate]="device.attributes['offlineAlarmEnabled'] == null"
+                          [disableRipple]="true"
+                          (click)="$event.preventDefault()">
+                      </mat-checkbox>
+                    </td>
+                    <td class="threshold-cell">
+                      <span [class.threshold-empty]="device.attributes['inactivityTimeout'] == null">
+                        {{ msToMin(device.attributes['inactivityTimeout']) ?? '—' }}
+                      </span>
+                    </td>
+                    <td class="count-cell">
+                      {{ device.alarmEmailList.length }}
+                    </td>
+                    <td class="count-cell">
+                      {{ device.alarmSmsList.length }}
+                    </td>
+                    <td class="alarms-toggle-col">
+                      <button mat-icon-button
+                              class="alarms-toggle-btn"
+                              [class.alarms-toggle-off]="!alarmsActive(device)"
+                              (click)="toggleDeviceAlarms(device, $event)"
+                              [matTooltip]="alarmsActive(device) ? 'Alarms enabled — click to silence' : 'Alarms silenced — click to enable'">
+                        <mat-icon>{{ alarmsActive(device) ? 'notifications' : 'notifications_off' }}</mat-icon>
+                      </button>
+                    </td>
+                    <td class="actions-col">
+                      <button mat-icon-button (click)="openEditDevice(device)" matTooltip="Edit device">
+                        <mat-icon>edit</mat-icon>
+                      </button>
+                    </td>
+                  </tr>
+                </ng-container>
+              </tbody>
+            </table>
+          </div>
+
+          <mat-paginator [length]="processedDevices.length"
+                         [pageSize]="pageSize"
+                         [pageIndex]="page"
+                         [pageSizeOptions]="[10, 20, 30]"
+                         showFirstLastButtons
+                         (page)="onPageChange($event)">
+          </mat-paginator>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div *ngIf="editDialogOpen && currentGroup as group" #editBackdrop class="template-dialog-backdrop" (click)="closeEdit()">
+    <div class="template-dialog" (click)="$event.stopPropagation()">
+      <div class="template-dialog-header">
+        <h3 *ngIf="!bulkEdit && editingDevice">Edit — {{ editingDevice.deviceName }}</h3>
+        <h3 *ngIf="bulkEdit">Edit {{ selectedCount() }} device{{ selectedCount() === 1 ? '' : 's' }}</h3>
+        <button mat-icon-button (click)="closeEdit()" matTooltip="Close">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+
+      <div class="template-dialog-body">
+        <div *ngIf="bulkEdit" class="template-selection-info">
+          <mat-icon>info</mat-icon>
+          <span>Only fields you fill in will be applied to the {{ selectedCount() }} selected device{{ selectedCount() === 1 ? '' : 's' }}. Leave a field blank to keep its current value.</span>
+        </div>
+
+        <div class="template-section-title">Thresholds</div>
+        <div class="template-grid">
+          <div *ngFor="let t of group.config.thresholds" class="threshold-pair">
+            <div class="threshold-pair-inputs">
+              <mat-form-field class="dense-field threshold-input">
+                <mat-label>{{ t.label }}</mat-label>
+                <input matInput type="number" (keydown)="restrictToNumber($event)" (paste)="restrictPasteToNumber($event)" step="any"
+                       [ngModel]="editForm.values[t.key]"
+                       (ngModelChange)="editForm.values[t.key] = $event">
+                <span *ngIf="t.unit" matTextSuffix>&nbsp;{{ t.unit }}</span>
+              </mat-form-field>
+              <mat-form-field class="dense-field hysteresis-input"
+                              matTooltip="Optional. Clear rule fires when telemetry returns to threshold ± hysteresis. Leave blank to clear at the threshold.">
+                <mat-label>± Hysteresis</mat-label>
+                <input matInput type="number" (keydown)="restrictToNumber($event)" (paste)="restrictPasteToNumber($event)" min="0" step="any"
+                       [ngModel]="editForm.values[hysteresisKey(t)]"
+                       (ngModelChange)="editForm.values[hysteresisKey(t)] = $event">
+                <span *ngIf="t.unit" matTextSuffix>&nbsp;{{ t.unit }}</span>
+              </mat-form-field>
+            </div>
+            <small class="alarm-preview">{{ alarmPreview(t, editForm.values) }}</small>
+          </div>
+        </div>
+
+        <div class="template-section-title" matTooltip="Condition must persist for this duration before the alarm fires (and clears)">Alarm Delay</div>
+        <div class="template-grid">
+          <mat-form-field class="dense-field">
+            <mat-label>Delay</mat-label>
+            <input matInput type="number" (keydown)="restrictToNumber($event)" (paste)="restrictPasteToNumber($event)" min="0" step="1"
+                   [(ngModel)]="editForm.delayValue"
+                   placeholder="Leave blank for immediate">
+          </mat-form-field>
+          <mat-form-field class="dense-field">
+            <mat-label>Unit</mat-label>
+            <mat-select [(value)]="editForm.delayUnit">
+              <mat-option *ngFor="let u of delayUnits" [value]="u">{{ u }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        <ng-container *ngIf="group.config.digitals?.length">
+          <div class="template-section-title">Digital Alarms</div>
+          <div class="template-digitals">
+            <div *ngFor="let dig of group.config.digitals" class="template-digital-row">
+              <div class="template-digital-label" [matTooltip]="dig.alarmName">{{ dig.label }}</div>
+              <mat-checkbox *ngIf="!bulkEdit"
+                            [checked]="editForm.digitals[dig.key]?.enabled === true"
+                            (change)="ensureEditDigital(dig.key); editForm.digitals[dig.key].enabled = $event.checked">
+                Enabled
+              </mat-checkbox>
+              <mat-form-field *ngIf="bulkEdit" class="dense-field digital-condition-field">
+                <mat-label>State</mat-label>
+                <mat-select [value]="editForm.digitals[dig.key]?.enabled"
+                            (selectionChange)="ensureEditDigital(dig.key); editForm.digitals[dig.key].enabled = $event.value">
+                  <mat-option [value]="null">Don't change</mat-option>
+                  <mat-option [value]="true">Enabled</mat-option>
+                  <mat-option [value]="false">Disabled</mat-option>
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field *ngIf="dig.statusValueType === 'BOOLEAN'" class="dense-field digital-condition-field">
+                <mat-label>Active when status is</mat-label>
+                <mat-select [value]="editForm.digitals[dig.key]?.condition"
+                            (selectionChange)="ensureEditDigital(dig.key); editForm.digitals[dig.key].condition = $event.value">
+                  <mat-option [value]="true">True</mat-option>
+                  <mat-option [value]="false">False</mat-option>
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field *ngIf="dig.statusValueType === 'NUMERIC'" class="dense-field digital-condition-field">
+                <mat-label>Active when status equals</mat-label>
+                <input matInput type="number" (keydown)="restrictToNumber($event)" (paste)="restrictPasteToNumber($event)" step="any"
+                       [ngModel]="editForm.digitals[dig.key]?.condition"
+                       (ngModelChange)="ensureEditDigital(dig.key); editForm.digitals[dig.key].condition = $event">
+              </mat-form-field>
+            </div>
+          </div>
+        </ng-container>
+
+        <div class="template-section-title">Notifications</div>
+        <div class="template-grid">
+          <div class="template-toggle" *ngIf="!bulkEdit">
+            <mat-checkbox [checked]="editForm.values['alarmsEnabled'] !== false"
+                          (change)="editForm.values['alarmsEnabled'] = $event.checked">
+              Send alarm notifications for this device
+            </mat-checkbox>
+          </div>
+          <mat-form-field class="dense-field" *ngIf="bulkEdit">
+            <mat-label>Alarms</mat-label>
+            <mat-select [value]="editForm.values['alarmsEnabled']"
+                        (selectionChange)="editForm.values['alarmsEnabled'] = $event.value">
+              <mat-option [value]="null">Don't change</mat-option>
+              <mat-option [value]="true">Enabled</mat-option>
+              <mat-option [value]="false">Disabled</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        <div class="template-section-title">Offline</div>
+        <div class="template-grid">
+          <div class="template-toggle" *ngIf="!bulkEdit">
+            <mat-checkbox [checked]="editForm.values['offlineAlarmEnabled'] === true"
+                          (change)="editForm.values['offlineAlarmEnabled'] = $event.checked">
+              Offline alarm enabled
+            </mat-checkbox>
+          </div>
+          <mat-form-field class="dense-field" *ngIf="bulkEdit">
+            <mat-label>Offline alarm</mat-label>
+            <mat-select [value]="editForm.values['offlineAlarmEnabled']"
+                        (selectionChange)="editForm.values['offlineAlarmEnabled'] = $event.value">
+              <mat-option [value]="null">Don't change</mat-option>
+              <mat-option [value]="true">Enabled</mat-option>
+              <mat-option [value]="false">Disabled</mat-option>
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field class="dense-field">
+            <mat-label>Timeout (min)</mat-label>
+            <input matInput type="number" (keydown)="restrictToNumber($event)" (paste)="restrictPasteToNumber($event)" step="1"
+                   [ngModel]="editForm.values['inactivityTimeout']"
+                   (ngModelChange)="editForm.values['inactivityTimeout'] = $event">
+          </mat-form-field>
+        </div>
+
+        <div class="template-section-title">Alarm Emails</div>
+        <mat-form-field class="template-emails-field dense-field" [class.dialog-field-invalid]="!isEmailListValid(editForm.emails)">
+          <mat-label>Emails (comma separated)</mat-label>
+          <input matInput type="text" [(ngModel)]="editForm.emails" placeholder="user1@example.com, user2@example.com">
+        </mat-form-field>
+        <div *ngIf="!isEmailListValid(editForm.emails)" class="dialog-field-error">
+          One or more email addresses are invalid.
+        </div>
+
+        <div class="template-section-title">Alarm SMS</div>
+        <mat-form-field class="template-emails-field dense-field" [class.dialog-field-invalid]="!isSmsListValid(editForm.sms)">
+          <mat-label>SMS numbers (comma separated)</mat-label>
+          <input matInput type="text" [(ngModel)]="editForm.sms" placeholder="+15551234567, +15557654321">
+        </mat-form-field>
+        <div *ngIf="!isSmsListValid(editForm.sms)" class="dialog-field-error">
+          One or more SMS numbers are invalid (need at least 7 digits; + / spaces / - / () allowed).
+        </div>
+      </div>
+
+      <div class="template-dialog-actions">
+        <button mat-button (click)="closeEdit()" [disabled]="saving">Cancel</button>
+        <button mat-flat-button color="primary"
+                (click)="bulkEdit ? saveBulkEdit() : saveEditDevice()"
+                [disabled]="saving || !isEmailListValid(editForm.emails) || !isSmsListValid(editForm.sms)">
+          {{ saving ? 'Saving...' : (bulkEdit ? 'Apply to selected' : 'Save') }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>

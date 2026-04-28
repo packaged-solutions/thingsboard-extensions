@@ -1,0 +1,70 @@
+<div style="height: 100%; display: flex; flex-direction: column;">
+    <div class="table-content" style="flex: 1; overflow: auto;">
+    <table mat-table [dataSource]="dataSource.data.length > 0 ? dataSource : emptyData" class="mat-table">
+
+        <ng-container *ngFor="let column of dynamicColumns" [matColumnDef]="column">
+
+            <mat-header-cell
+                    *matHeaderCellDef
+                    [ngStyle]="{
+                     borderTop: reportVisuals.verticalBorder ? '1px solid rgba(0,0,0,0.12)' : '',
+                     borderLeft: column !=='Date' ? reportVisuals.verticalBorder ? '1px solid rgba(0,0,0,0.12)' : '' : '',
+                     width: column !== 'Date' ? reportVisuals.columnWidth : '',
+                     minWidth: column !=='Date' ? reportVisuals.columnWidth : '',
+                     maxWidth: column !== 'Date' ? reportVisuals.columnWidth : '',
+                     textAlign: 'center',
+                     padding: 0,
+                     }"
+            > {{ column }}
+            </mat-header-cell>
+
+            <div *ngIf="column === 'Date'">
+                <mat-cell
+                        [ngStyle]="{ textAlign: 'center', padding:0 }"
+                        *matCellDef="let element"> {{ element.time }}
+                </mat-cell>
+            </div>
+
+            <div *ngIf="column !== 'Date'">
+                <mat-cell
+                        [ngStyle]="{
+                        borderLeft: reportVisuals.verticalBorder ? '1px solid rgba(0,0,0,0.12)' : '',
+                        textAlign: 'center',
+                        'color':'white',
+                        width: reportVisuals.columnWidth,
+                        minWidth: reportVisuals.columnWidth,
+                        maxWidth: reportVisuals.columnWidth,
+                        padding: 0,
+                         }"
+                        *matCellDef="let element"
+                        [style.background-color]="element[column].colour"
+                > {{ element[column].value }}
+
+                </mat-cell>
+            </div>
+
+        </ng-container>
+
+        <ng-container matColumnDef="empty-row">
+            <mat-cell *matCellDef="let element">{{ emptyMessage }}</mat-cell>
+        </ng-container>
+
+        <mat-header-row
+                [ngStyle]="{height:'38px'}"
+                *matHeaderRowDef="dynamicColumns; sticky: true">
+        </mat-header-row>
+
+        <mat-row
+                [ngStyle]="{ height: reportVisuals.rowHeight }"
+                *matRowDef="let row; columns: dataSource.data.length > 0 ? dynamicColumns : ['empty-row'];"
+        >
+        </mat-row>
+
+    </table>
+    </div>
+    <mat-paginator #paginator [pageSizeOptions]="[10,20,30]"
+                   showFirstLastButtons
+                   aria-label="Select page">
+    </mat-paginator>
+    <tr mat-footer-row *matFooterRowDef="['paginator']; sticky: true"></tr>
+</div>

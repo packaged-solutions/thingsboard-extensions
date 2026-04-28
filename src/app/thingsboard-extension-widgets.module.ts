@@ -7,6 +7,8 @@ import { TranslateService } from '@ngx-translate/core';
 import addCustomWidgetLocale from './locale/custom-widget-locale.constant';
 import { CommonModule } from '@angular/common';
 import { ExamplesModule } from './components/examples/examples.module';
+import { HaccpReportWidgetModule } from './components/haccp/haccp-report-widget.module';
+import { AlarmThresholdEditorModule } from './components/alarm-threshold-editor/alarm-threshold-editor.module';
 import { addLibraryStyles } from './scss/lib-styles';
 
 @NgModule({
@@ -15,7 +17,9 @@ import { addLibraryStyles } from './scss/lib-styles';
     CommonModule
   ],
   exports: [
-    ExamplesModule
+    ExamplesModule,
+    HaccpReportWidgetModule,
+    AlarmThresholdEditorModule
   ]
 })
 export class ThingsboardExtensionWidgetsModule {
