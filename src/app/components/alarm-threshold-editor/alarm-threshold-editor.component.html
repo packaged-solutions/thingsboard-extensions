@@ -125,16 +125,12 @@
                     SMS
                     <ng-container *ngTemplateOutlet="sortArrow; context: { $implicit: 'sms' }"></ng-container>
                   </th>
-                  <th class="alarms-toggle-col" matTooltip="Alarms enabled">
-                    <mat-icon>notifications</mat-icon>
-                  </th>
-                  <th class="actions-col"></th>
                 </tr>
               </thead>
               <tbody>
                 <ng-container *ngFor="let device of pagedDevices">
-                  <tr>
-                    <td class="checkbox-col">
+                  <tr class="clickable-row" (click)="openEditDevice(device)">
+                    <td class="checkbox-col" (click)="$event.stopPropagation()">
                       <mat-checkbox [checked]="device.selected"
                                     (change)="toggleDeviceSelection(device, $event.checked)">
                       </mat-checkbox>
@@ -174,20 +170,6 @@
                     </td>
                     <td class="count-cell">
                       {{ device.alarmSmsList.length }}
-                    </td>
-                    <td class="alarms-toggle-col">
-                      <button mat-icon-button
-                              class="alarms-toggle-btn"
-                              [class.alarms-toggle-off]="!alarmsActive(device)"
-                              (click)="toggleDeviceAlarms(device, $event)"
-                              [matTooltip]="alarmsActive(device) ? 'Alarms enabled — click to silence' : 'Alarms silenced — click to enable'">
-                        <mat-icon>{{ alarmsActive(device) ? 'notifications' : 'notifications_off' }}</mat-icon>
-                      </button>
-                    </td>
-                    <td class="actions-col">
-                      <button mat-icon-button (click)="openEditDevice(device)" matTooltip="Edit device">
-                        <mat-icon>edit</mat-icon>
-                      </button>
                     </td>
                   </tr>
                 </ng-container>
@@ -233,7 +215,7 @@
                 <input matInput type="number" (keydown)="restrictToNumber($event)" (paste)="restrictPasteToNumber($event)" step="any"
                        [ngModel]="editForm.values[t.key]"
                        (ngModelChange)="editForm.values[t.key] = $event">
-                <span *ngIf="t.unit" matTextSuffix>&nbsp;{{ t.unit }}</span>
+                <span *ngIf="t.unit" matTextSuffix class="threshold-unit">{{ t.unit }}</span>
               </mat-form-field>
               <mat-form-field class="dense-field hysteresis-input"
                               matTooltip="Optional. Clear rule fires when telemetry returns to threshold ± hysteresis. Leave blank to clear at the threshold.">
@@ -241,10 +223,14 @@
                 <input matInput type="number" (keydown)="restrictToNumber($event)" (paste)="restrictPasteToNumber($event)" min="0" step="any"
                        [ngModel]="editForm.values[hysteresisKey(t)]"
                        (ngModelChange)="editForm.values[hysteresisKey(t)] = $event">
-                <span *ngIf="t.unit" matTextSuffix>&nbsp;{{ t.unit }}</span>
+                <span *ngIf="t.unit" matTextSuffix class="threshold-unit">{{ t.unit }}</span>
               </mat-form-field>
             </div>
-            <small class="alarm-preview">{{ alarmPreview(t, editForm.values) }}</small>
+            <small *ngIf="thresholdPairError(t, editForm.values) as err; else previewLine"
+                   class="alarm-preview alarm-preview-error">{{ err }}</small>
+            <ng-template #previewLine>
+              <small class="alarm-preview">{{ alarmPreview(t, editForm.values) }}</small>
+            </ng-template>
           </div>
         </div>
 
@@ -304,15 +290,15 @@
         <div class="template-section-title">Notifications</div>
         <div class="template-grid">
           <div class="template-toggle" *ngIf="!bulkEdit">
-            <mat-checkbox [checked]="editForm.values['alarmsEnabled'] !== false"
-                          (change)="editForm.values['alarmsEnabled'] = $event.checked">
+            <mat-checkbox [checked]="editForm.values['alarmNotificationsEnabled'] !== false"
+                          (change)="editForm.values['alarmNotificationsEnabled'] = $event.checked">
               Send alarm notifications for this device
             </mat-checkbox>
           </div>
           <mat-form-field class="dense-field" *ngIf="bulkEdit">
             <mat-label>Alarms</mat-label>
-            <mat-select [value]="editForm.values['alarmsEnabled']"
-                        (selectionChange)="editForm.values['alarmsEnabled'] = $event.value">
+            <mat-select [value]="editForm.values['alarmNotificationsEnabled']"
+                        (selectionChange)="editForm.values['alarmNotificationsEnabled'] = $event.value">
               <mat-option [value]="null">Don't change</mat-option>
               <mat-option [value]="true">Enabled</mat-option>
               <mat-option [value]="false">Disabled</mat-option>
@@ -368,7 +354,7 @@
         <button mat-button (click)="closeEdit()" [disabled]="saving">Cancel</button>
         <button mat-flat-button color="primary"
                 (click)="bulkEdit ? saveBulkEdit() : saveEditDevice()"
-                [disabled]="saving || !isEmailListValid(editForm.emails) || !isSmsListValid(editForm.sms)">
+                [disabled]="saving || !isEmailListValid(editForm.emails) || !isSmsListValid(editForm.sms) || hasThresholdErrors()">
           {{ saving ? 'Saving...' : (bulkEdit ? 'Apply to selected' : 'Save') }}
         </button>
       </div>

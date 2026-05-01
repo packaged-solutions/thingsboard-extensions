@@ -3,19 +3,16 @@ import { AlarmConfigMap } from './alarm-threshold-editor.models';
 /**
  * Alarm configuration for all device profiles.
  *
- * Angular modules: import { ALARM_CONFIG } from './alarm-config';
- * Vanilla widgets:  add the compiled module as a resource (isModule: true),
- *                   then access window.ALARM_CONFIG in onInit.
- *
  * Optional `details` override
  * ---------------------------
  * Every ThresholdConfig and DigitalConfig accepts an optional `details: string`
  * field. When the widget POSTs a calculated field, that string is written into
  * the create rule's `alarmDetails` (visible as "Additional info" on the alarm).
  *
- * - If `details` is omitted, the widget auto-generates a generic line:
- *     `<Label> alarm - ${<telemetryKey>}`
- *   e.g. `High Temperature alarm - ${temperature}`.
+ * - If `details` is omitted, the widget auto-generates a generic line that
+ *   appends the configured `unit` (when set):
+ *     `<Label> alarm - ${<telemetryKey>}<unit>`
+ *   e.g. `High Temperature alarm - ${temperature}°C`.
  *
  * - To match PRD wording (lowercase phrasing, units, etc.), set `details`
  *   explicitly. ThingsBoard supports `${telemetryKey}` substitutions, so:
@@ -177,7 +174,7 @@ export const ALARM_CONFIG: AlarmConfigMap = {
       { key: 'lowBatteryThreshold', label: 'Low Battery', telemetryKey: 'battery', unit: '%', operation: 'LESS_OR_EQUAL', severity: 'MAJOR', alarmName: 'Low Battery Alarm' }
     ],
     digitals: [
-      { key: 'digital', label: 'Digital', statusTelemetryKey: 'status', enabledAttributeKey: 'digitalAlarmEnabled', conditionAttributeKey: 'digitalAlarmCondition', severity: 'CRITICAL', alarmName: 'Digital Alarm', statusValueType: 'BOOLEAN' }
+      { key: 'digital', label: 'Digital', statusTelemetryKey: 'status', enabledAttributeKey: 'digitalAlarmEnabled', conditionAttributeKey: 'digitalAlarmCondition', severity: 'MAJOR', alarmName: 'Digital Alarm', statusValueType: 'BOOLEAN' }
     ]
   },
 
@@ -253,6 +250,3 @@ export const ALARM_CONFIG: AlarmConfigMap = {
   }
 
 };
-
-// Expose globally so vanilla widgets can access it after the module loads
-(window as any).ALARM_CONFIG = ALARM_CONFIG;

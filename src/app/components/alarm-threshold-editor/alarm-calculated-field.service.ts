@@ -55,32 +55,51 @@ export class AlarmCalculatedFieldService {
     hysteresis?: number | null
   ): any {
     const argName = threshold.telemetryKey;
+    const cfArgName = this.cfKey(threshold);
+    const cfClearArgName = this.cfClearKey(threshold);
     const clearOp = this.inverseOperation(threshold.operation);
     const isHigh = threshold.operation === 'GREATER' || threshold.operation === 'GREATER_OR_EQUAL';
     const clearValue = hysteresis != null && isFinite(hysteresis) && hysteresis > 0
       ? (isHigh ? value - hysteresis : value + hysteresis)
       : value;
-    const argDef = {
+    const telemetryArgDef = {
       refEntityKey: { key: argName, type: 'TS_LATEST' },
       defaultValue: ''
     };
-    const filterFor = (op: ThresholdOperation, predicateValue: number) => ({
+    // Both rules read their threshold dynamically from a server-scope attribute
+    // so a later attribute update re-targets create AND clear together. The
+    // defaultValue is a snapshot at save time (used if the attr is missing).
+    const cfArgDef = {
+      refEntityKey: { key: cfArgName, type: 'ATTRIBUTE', scope: 'SERVER_SCOPE' },
+      defaultValue: String(value)
+    };
+    const cfClearArgDef = {
+      refEntityKey: { key: cfClearArgName, type: 'ATTRIBUTE', scope: 'SERVER_SCOPE' },
+      defaultValue: String(clearValue)
+    };
+    const createFilter = {
       argument: argName,
       valueType: 'NUMERIC',
       operation: 'AND',
       predicates: [{
         type: 'NUMERIC',
-        operation: op,
-        value: { staticValue: predicateValue, dynamicValueArgument: null }
+        operation: threshold.operation,
+        value: { staticValue: null, dynamicValueArgument: cfArgName }
       }]
-    });
+    };
+    const clearFilter = {
+      argument: argName,
+      valueType: 'NUMERIC',
+      operation: 'AND',
+      predicates: [{
+        type: 'NUMERIC',
+        operation: clearOp,
+        value: { staticValue: null, dynamicValueArgument: cfClearArgName }
+      }]
+    };
     const details = this.thresholdAlarmDetails(threshold);
-    const conditionFor = (op: ThresholdOperation, predicateValue: number, includeDetails: boolean) => {
-      const expression = {
-        type: 'SIMPLE',
-        filters: [filterFor(op, predicateValue)],
-        operation: 'AND'
-      };
+    const wrapCondition = (filter: any, includeDetails: boolean) => {
+      const expression = { type: 'SIMPLE', filters: [filter], operation: 'AND' };
       const condition: any = delay
         ? {
             type: 'DURATION',
@@ -109,9 +128,9 @@ export class AlarmCalculatedFieldService {
       configurationVersion: 0,
       configuration: {
         type: 'ALARM',
-        arguments: { [argName]: argDef },
-        createRules: { [threshold.severity]: conditionFor(threshold.operation, value, true) },
-        clearRule: conditionFor(clearOp, clearValue, false),
+        arguments: { [argName]: telemetryArgDef, [cfArgName]: cfArgDef, [cfClearArgName]: cfClearArgDef },
+        createRules: { [threshold.severity]: wrapCondition(createFilter, true) },
+        clearRule: wrapCondition(clearFilter, false),
         propagate: true,
         propagateToOwner: true,
         propagateToOwnerHierarchy: true,
@@ -192,17 +211,29 @@ export class AlarmCalculatedFieldService {
             type: 'SIMPLE',
             expression: {
               type: 'SIMPLE',
-              filters: [{
-                argument: statusArg,
-                valueType: predicateType,
-                operation: 'AND',
-                predicates: [{
-                  type: predicateType,
-                  operation: 'NOT_EQUAL',
-                  value: { staticValue: null, dynamicValueArgument: conditionArg }
-                }]
-              }],
-              operation: 'AND'
+              filters: [
+                {
+                  argument: enabledArg,
+                  valueType: 'BOOLEAN',
+                  operation: 'AND',
+                  predicates: [{
+                    type: 'BOOLEAN',
+                    operation: 'EQUAL',
+                    value: { staticValue: false, dynamicValueArgument: null }
+                  }]
+                },
+                {
+                  argument: statusArg,
+                  valueType: predicateType,
+                  operation: 'AND',
+                  predicates: [{
+                    type: predicateType,
+                    operation: 'NOT_EQUAL',
+                    value: { staticValue: null, dynamicValueArgument: conditionArg }
+                  }]
+                }
+              ],
+              operation: 'OR'
             },
             schedule: null
           },
@@ -222,25 +253,42 @@ export class AlarmCalculatedFieldService {
   extractThresholdValue(cf: any, threshold: ThresholdConfig): number | null {
     if (!cf) return null;
     try {
-      const rule = cf.configuration?.createRules?.[threshold.severity];
-      const predicate = rule?.condition?.expression?.filters?.[0]?.predicates?.[0];
-      const v = predicate?.value?.staticValue;
-      return v == null ? null : Number(v);
+      const predicate = cf.configuration?.createRules?.[threshold.severity]
+        ?.condition?.expression?.filters?.[0]?.predicates?.[0];
+      const staticV = predicate?.value?.staticValue;
+      if (staticV != null) return Number(staticV);
+      // Dynamic predicate: fall back to the bound argument's defaultValue snapshot.
+      const argName = predicate?.value?.dynamicValueArgument;
+      const argDefault = argName ? cf.configuration?.arguments?.[argName]?.defaultValue : null;
+      return argDefault != null && argDefault !== '' ? Number(argDefault) : null;
     } catch {
       return null;
     }
   }
 
-  extractHysteresis(cf: any, threshold: ThresholdConfig): number | null {
+  extractHysteresis(cf: any, threshold: ThresholdConfig, thresholdValueOverride?: number | null): number | null {
     if (!cf) return null;
     try {
+      const clearPredicate = cf.configuration?.clearRule
+        ?.condition?.expression?.filters?.[0]?.predicates?.[0];
+      let clearV = clearPredicate?.value?.staticValue;
+      // New CFs reference the clear value via a dynamic argument; resolve it
+      // through the argument's defaultValue snapshot.
+      if (clearV == null) {
+        const clearArgName = clearPredicate?.value?.dynamicValueArgument;
+        const clearArgDefault = clearArgName ? cf.configuration?.arguments?.[clearArgName]?.defaultValue : null;
+        if (clearArgDefault != null && clearArgDefault !== '') clearV = clearArgDefault;
+      }
+      if (clearV == null) return null;
       const createV = cf.configuration?.createRules?.[threshold.severity]
         ?.condition?.expression?.filters?.[0]?.predicates?.[0]?.value?.staticValue;
-      const clearV = cf.configuration?.clearRule
-        ?.condition?.expression?.filters?.[0]?.predicates?.[0]?.value?.staticValue;
-      if (createV == null || clearV == null) return null;
+      // Prefer create's staticValue (legacy CFs); fall back to override / extracted threshold (new dynamic CFs).
+      const referenceThreshold = createV != null
+        ? Number(createV)
+        : (thresholdValueOverride != null ? thresholdValueOverride : this.extractThresholdValue(cf, threshold));
+      if (referenceThreshold == null) return null;
       const isHigh = threshold.operation === 'GREATER' || threshold.operation === 'GREATER_OR_EQUAL';
-      const diff = isHigh ? Number(createV) - Number(clearV) : Number(clearV) - Number(createV);
+      const diff = isHigh ? referenceThreshold - Number(clearV) : Number(clearV) - referenceThreshold;
       return diff > 0 ? diff : null;
     } catch {
       return null;
@@ -249,6 +297,31 @@ export class AlarmCalculatedFieldService {
 
   hysteresisKey(threshold: ThresholdConfig): string {
     return threshold.key.replace(/Threshold(\d*)$/, 'Hysteresis$1');
+  }
+
+  cfKey(threshold: ThresholdConfig): string {
+    return 'cf' + threshold.key.charAt(0).toUpperCase() + threshold.key.slice(1);
+  }
+
+  cfClearKey(threshold: ThresholdConfig): string {
+    return this.cfKey(threshold) + 'Clear';
+  }
+
+  // Value written to the *original* threshold attribute on save to make any
+  // device-profile alarm rule that reads it never fire. Pairs with cfKey(),
+  // which holds the user's real threshold for the CF.
+  sentinelForOperation(op: ThresholdOperation): number {
+    switch (op) {
+      case 'GREATER':
+      case 'GREATER_OR_EQUAL':
+        return 999999;
+      case 'LESS':
+      case 'LESS_OR_EQUAL':
+        return -999999;
+      case 'EQUAL':
+      case 'NOT_EQUAL':
+        return 999999;
+    }
   }
 
   extractDelay(deviceCfs: Map<string, any>, thresholds: ThresholdConfig[]): AlarmDelay | null {
@@ -271,7 +344,7 @@ export class AlarmCalculatedFieldService {
 
   private thresholdAlarmDetails(t: ThresholdConfig): string {
     if (t.details) return t.details;
-    return `${t.label} alarm - $\{${t.telemetryKey}}`;
+    return `${t.label} alarm - $\{${t.telemetryKey}}${t.unit ?? ''}`;
   }
 
   private digitalAlarmDetails(d: DigitalConfig): string {

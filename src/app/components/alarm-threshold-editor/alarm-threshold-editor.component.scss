@@ -222,36 +222,12 @@
     }
   }
 
+  tbody tr.clickable-row {
+    cursor: pointer;
+  }
+
   tbody tr:hover td {
     background: rgba(0, 0, 0, 0.04);
-  }
-
-  .actions-col {
-    width: 48px;
-    padding: 0 4px;
-    text-align: right;
-  }
-
-  .alarms-toggle-col {
-    width: 44px;
-    padding: 0 4px;
-    text-align: center;
-
-    mat-icon {
-      font-size: 18px;
-      width: 18px;
-      height: 18px;
-      vertical-align: middle;
-      color: rgba(0, 0, 0, 0.54);
-    }
-  }
-
-  .alarms-toggle-btn {
-    color: #1976d2;
-
-    &.alarms-toggle-off {
-      color: #d32f2f;
-    }
   }
 
   .checkbox-col {
@@ -287,12 +263,12 @@
   }
 
   .offline-cell {
-    text-align: center;
     padding: 0 8px;
 
     mat-checkbox {
       display: inline-flex;
       pointer-events: none;
+      margin-left: -11px;
     }
   }
 }
@@ -403,21 +379,26 @@
   gap: 2px;
 
   .threshold-pair-inputs {
-    display: flex;
-    gap: 8px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 8px;
     align-items: flex-start;
   }
 
-  .threshold-input {
-    flex: 1 1 0;
-    min-width: 0;
-    max-width: 210px;
-  }
-
+  .threshold-input,
   .hysteresis-input {
-    flex: 1 1 0;
     min-width: 0;
-    max-width: 175px;
+
+    .mat-mdc-form-field-text-suffix {
+      align-self: flex-end;
+      padding-bottom: 8px;
+    }
+
+    .threshold-unit {
+      font-size: 11px;
+      color: rgba(0, 0, 0, 0.6);
+      margin-left: 4px;
+    }
   }
 
   .alarm-preview {
@@ -425,6 +406,12 @@
     color: rgba(0, 0, 0, 0.6);
     padding-left: 2px;
     min-height: 14px;
+    margin-top: -16px;
+    margin-bottom: 10px;
+
+    &.alarm-preview-error {
+      color: #d32f2f;
+    }
   }
 }
 

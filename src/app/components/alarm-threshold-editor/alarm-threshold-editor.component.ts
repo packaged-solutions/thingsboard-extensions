@@ -31,7 +31,8 @@ interface PageData<T> {
 @Component({
   selector: 'tb-alarm-threshold-editor',
   templateUrl: './alarm-threshold-editor.component.html',
-  styleUrls: ['./alarm-threshold-editor.component.scss']
+  styleUrls: ['./alarm-threshold-editor.component.scss'],
+  standalone: false
 })
 export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
 
@@ -126,7 +127,14 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     if (this.sortBy) {
       const key = this.sortBy;
       const dirMul = this.sortDir === 'asc' ? 1 : -1;
-      rows.sort((a, b) => dirMul * this.compareRows(a, b, key));
+      rows.sort((a, b) => {
+        const av = this.sortValue(a, key);
+        const bv = this.sortValue(b, key);
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        return dirMul * this.compareValues(av, bv);
+      });
     }
     return rows;
   }
@@ -137,28 +145,15 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     return rows.slice(start, start + this.pageSize);
   }
 
-  private compareRows(a: DeviceThresholdRow, b: DeviceThresholdRow, key: string): number {
-    let av: any;
-    let bv: any;
-    if (key === 'device') {
-      av = a.deviceName;
-      bv = b.deviceName;
-    } else if (key === 'customer') {
-      av = a.customerName;
-      bv = b.customerName;
-    } else if (key === 'emails') {
-      av = a.alarmEmailList.length;
-      bv = b.alarmEmailList.length;
-    } else if (key === 'sms') {
-      av = a.alarmSmsList.length;
-      bv = b.alarmSmsList.length;
-    } else {
-      av = a.attributes[key];
-      bv = b.attributes[key];
-    }
-    if (av == null && bv == null) return 0;
-    if (av == null) return 1;
-    if (bv == null) return -1;
+  private sortValue(row: DeviceThresholdRow, key: string): any {
+    if (key === 'device') return row.deviceName;
+    if (key === 'customer') return row.customerName;
+    if (key === 'emails') return row.alarmEmailList.length;
+    if (key === 'sms') return row.alarmSmsList.length;
+    return row.attributes[key];
+  }
+
+  private compareValues(av: any, bv: any): number {
     if (typeof av === 'number' && typeof bv === 'number') return av - bv;
     if (typeof av === 'boolean' && typeof bv === 'boolean') return (av ? 1 : 0) - (bv ? 1 : 0);
     return String(av).localeCompare(String(bv), undefined, { numeric: true });
@@ -331,7 +326,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     });
     values['offlineAlarmEnabled'] = null;
     values['inactivityTimeout'] = null;
-    values['alarmsEnabled'] = null;
+    values['alarmNotificationsEnabled'] = null;
 
     const digitals: { [k: string]: { enabled: boolean | null; condition: boolean | number | null } } = {};
     (group.config.digitals || []).forEach(dig => {
@@ -379,7 +374,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       : null;
     const inactivityMs = device.attributes['inactivityTimeout'];
     values['inactivityTimeout'] = this.msToMin(inactivityMs);
-    values['alarmsEnabled'] = device.alarmsEnabled !== false;
+    values['alarmNotificationsEnabled'] = device.alarmNotificationsEnabled !== false;
 
     const digitals: { [k: string]: { enabled: boolean | null; condition: boolean | number | null } } = {};
     (group.config.digitals || []).forEach(dig => {
@@ -464,10 +459,10 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     const inactivityTimeoutMs = this.minToMs(offlineTimeoutRaw as number | null);
     const applyOfflineTimeout = inactivityTimeoutMs != null;
 
-    const alarmsEnabledForm = this.editForm.values['alarmsEnabled'];
-    const alarmsEnabledValue = typeof alarmsEnabledForm === 'boolean' ? alarmsEnabledForm : true;
-    const alarmsEnabledOriginal = this.editForm.original.values['alarmsEnabled'];
-    const applyAlarmsEnabled = alarmsEnabledValue !== alarmsEnabledOriginal;
+    const alarmNotificationsEnabledForm = this.editForm.values['alarmNotificationsEnabled'];
+    const alarmNotificationsEnabledValue = typeof alarmNotificationsEnabledForm === 'boolean' ? alarmNotificationsEnabledForm : true;
+    const alarmNotificationsEnabledOriginal = this.editForm.original.values['alarmNotificationsEnabled'];
+    const applyAlarmNotificationsEnabled = alarmNotificationsEnabledValue !== alarmNotificationsEnabledOriginal;
 
     const digitalsToApply = (group.config.digitals || []).filter(d => {
       const state = this.editForm.digitals[d.key];
@@ -476,7 +471,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
 
     if (
       thresholdsToApply.length === 0 && !applyEmails && !applySms && !applyOfflineEnabled
-      && !applyOfflineTimeout && !applyAlarmsEnabled && digitalsToApply.length === 0
+      && !applyOfflineTimeout && !applyAlarmNotificationsEnabled && digitalsToApply.length === 0
     ) {
       this.closeEdit();
       return;
@@ -484,7 +479,6 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
 
     this.saving = true;
 
-    // const existingByDevice$ = this.cfService.getForDevices([device.deviceId]);
     const existingByDevice$ = of(new Map<string, Map<string, any>>());
     const changedAlarmKeys = new Set<string>();
 
@@ -519,8 +513,8 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
         if (applyOfflineTimeout) {
           requests.push(this.saveAttribute(device.deviceId, 'inactivityTimeout', inactivityTimeoutMs as number));
         }
-        if (applyAlarmsEnabled) {
-          requests.push(this.saveAttribute(device.deviceId, 'alarmsEnabled', alarmsEnabledValue));
+        if (applyAlarmNotificationsEnabled) {
+          requests.push(this.saveAttribute(device.deviceId, 'alarmNotificationsEnabled', alarmNotificationsEnabledValue));
         }
         digitalsToApply.forEach(dig => {
           const state = this.editForm.digitals[dig.key];
@@ -603,8 +597,8 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
         if (applyOfflineTimeout) {
           device.attributes['inactivityTimeout'] = inactivityTimeoutMs;
         }
-        if (applyAlarmsEnabled) {
-          device.alarmsEnabled = alarmsEnabledValue;
+        if (applyAlarmNotificationsEnabled) {
+          device.alarmNotificationsEnabled = alarmNotificationsEnabledValue;
         }
         digitalsToApply.forEach(dig => {
           const state = this.editForm.digitals[dig.key];
@@ -654,9 +648,9 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     const inactivityTimeoutMs = this.minToMs(offlineTimeoutRaw as number | null);
     const applyOfflineTimeout = inactivityTimeoutMs != null;
 
-    const alarmsEnabledRaw = this.editForm.values['alarmsEnabled'];
-    const applyAlarmsEnabled = typeof alarmsEnabledRaw === 'boolean';
-    const alarmsEnabledValue = applyAlarmsEnabled ? alarmsEnabledRaw as boolean : null;
+    const alarmNotificationsEnabledRaw = this.editForm.values['alarmNotificationsEnabled'];
+    const applyAlarmNotificationsEnabled = typeof alarmNotificationsEnabledRaw === 'boolean';
+    const alarmNotificationsEnabledValue = applyAlarmNotificationsEnabled ? alarmNotificationsEnabledRaw as boolean : null;
 
     const digitalsToApply = (group.config.digitals || []).filter(d => {
       const state = this.editForm.digitals?.[d.key];
@@ -665,7 +659,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
 
     if (
       thresholdsToApply.length === 0 && !applyEmails && !applySms && !applyOfflineEnabled
-      && !applyOfflineTimeout && !applyAlarmsEnabled && digitalsToApply.length === 0
+      && !applyOfflineTimeout && !applyAlarmNotificationsEnabled && digitalsToApply.length === 0
     ) {
       this.closeEdit();
       return;
@@ -704,8 +698,8 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
           if (applyOfflineTimeout) {
             requests.push(this.saveAttribute(device.deviceId, 'inactivityTimeout', inactivityTimeoutMs as number));
           }
-          if (applyAlarmsEnabled) {
-            requests.push(this.saveAttribute(device.deviceId, 'alarmsEnabled', alarmsEnabledValue as boolean));
+          if (applyAlarmNotificationsEnabled) {
+            requests.push(this.saveAttribute(device.deviceId, 'alarmNotificationsEnabled', alarmNotificationsEnabledValue as boolean));
           }
           digitalsToApply.forEach(dig => {
             const state = this.editForm.digitals[dig.key];
@@ -754,8 +748,8 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
           if (applyOfflineTimeout) {
             d.attributes['inactivityTimeout'] = inactivityTimeoutMs;
           }
-          if (applyAlarmsEnabled) {
-            d.alarmsEnabled = alarmsEnabledValue;
+          if (applyAlarmNotificationsEnabled) {
+            d.alarmNotificationsEnabled = alarmNotificationsEnabledValue;
           }
           digitalsToApply.forEach(dig => {
             const state = this.editForm.digitals[dig.key];
@@ -810,6 +804,50 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     event.preventDefault();
   }
 
+  private isHighOp(op: ThresholdConfig['operation']): boolean {
+    return op === 'GREATER' || op === 'GREATER_OR_EQUAL';
+  }
+
+  private isLowOp(op: ThresholdConfig['operation']): boolean {
+    return op === 'LESS' || op === 'LESS_OR_EQUAL';
+  }
+
+  private findPairedThreshold(t: ThresholdConfig): ThresholdConfig | null {
+    if (!this.currentGroup) return null;
+    const wantLow = this.isHighOp(t.operation);
+    const wantHigh = this.isLowOp(t.operation);
+    if (!wantLow && !wantHigh) return null;
+    return this.currentGroup.config.thresholds.find(o =>
+      o !== t
+      && o.telemetryKey === t.telemetryKey
+      && (wantLow ? this.isLowOp(o.operation) : this.isHighOp(o.operation))
+    ) || null;
+  }
+
+  thresholdPairError(t: ThresholdConfig, values: { [key: string]: number | boolean | null }): string {
+    const pair = this.findPairedThreshold(t);
+    if (!pair) return '';
+    const v = values[t.key];
+    const pv = values[pair.key];
+    if (v == null || v === ('' as any) || pv == null || pv === ('' as any)) return '';
+    const a = Number(v), b = Number(pv);
+    if (!isFinite(a) || !isFinite(b)) return '';
+    const isHigh = this.isHighOp(t.operation);
+    const high = isHigh ? a : b;
+    const low = isHigh ? b : a;
+    if (low >= high) {
+      const unit = t.unit ? ` ${t.unit}` : '';
+      return `Low (${low}${unit}) must be less than High (${high}${unit})`;
+    }
+    return '';
+  }
+
+  hasThresholdErrors(): boolean {
+    if (!this.currentGroup) return false;
+    return this.currentGroup.config.thresholds
+      .some(t => this.thresholdPairError(t, this.editForm.values) !== '');
+  }
+
   alarmPreview(t: ThresholdConfig, values: { [key: string]: number | boolean | null }): string {
     const v = values[t.key];
     if (v == null || v === ('' as any) || !isFinite(Number(v))) return '';
@@ -836,22 +874,6 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
   offlineEnabled(device: DeviceThresholdRow): boolean {
     const raw = device.attributes['offlineAlarmEnabled'];
     return raw === true || raw === 'true';
-  }
-
-  alarmsActive(device: DeviceThresholdRow): boolean {
-    return device.alarmsEnabled !== false;
-  }
-
-  toggleDeviceAlarms(device: DeviceThresholdRow, event?: Event): void {
-    event?.stopPropagation();
-    const next = !this.alarmsActive(device);
-    device.alarmsEnabled = next;
-    this.saveAttribute(device.deviceId, 'alarmsEnabled', next)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        error: (err) => console.error('[AlarmEditor] Failed to toggle alarms:', err)
-      });
-    this.ctx.detectChanges();
   }
 
   digitalSummary(device: DeviceThresholdRow, dig: DigitalConfig): string {
@@ -918,7 +940,13 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       if (changedAlarmKeys && !changedAlarmKeys.has(t.key)) return;
       const hRaw = values[this.cfService.hysteresisKey(t)];
       const hysteresis = hRaw == null || hRaw === ('' as any) ? null : Number(hRaw);
-      body[t.key] = num;
+      const isHigh = t.operation === 'GREATER' || t.operation === 'GREATER_OR_EQUAL';
+      const clearVal = hysteresis != null && isFinite(hysteresis) && hysteresis > 0
+        ? (isHigh ? num - hysteresis : num + hysteresis)
+        : num;
+      body[this.cfService.cfKey(t)] = num;
+      body[this.cfService.cfClearKey(t)] = clearVal;
+      body[t.key] = this.cfService.sentinelForOperation(t.operation);
       body[`alarmConfig_${t.key}`] = this.cfService.buildThresholdPayload(deviceId, t, num, delay, hysteresis);
     });
     (group.config.digitals || []).forEach(d => {
@@ -970,34 +998,123 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     this.loading = true;
     this.profileGroups = [];
 
-    const ids = this.allCustomerIds;
-    if (ids.length === 0) {
-      this.loading = false;
-      this.ctx.detectChanges();
-      return;
-    }
+    const fetch$ = this.isTenantAdmin
+      ? this.fetchTenantDeviceInfos()
+      : this.fetchCustomerDeviceInfos();
 
-    forkJoin(
-      ids.map(cid =>
-        this.ctx.http.get<PageData<DeviceInfo>>(
-          `/api/customer/${cid}/deviceInfos?pageSize=1000&page=0`
-        )
-      )
-    ).pipe(takeUntil(this.destroy$)).subscribe({
-      next: (pages) => {
-        const devices: DeviceInfo[] = [];
-        pages.forEach(p => {
-          const rows = p?.data || [];
-          devices.push(...rows);
-        });
-        this.loadAttributesAndGroup(devices, previousProfileName);
-      },
+    fetch$.pipe(takeUntil(this.destroy$)).subscribe({
+      next: (devices) => this.loadAttributesAndGroup(devices, previousProfileName),
       error: (err) => {
         console.error('[AlarmEditor] Failed to load devices:', err);
         this.loading = false;
         this.ctx.detectChanges();
       }
     });
+  }
+
+  private fetchTenantDeviceInfos(): Observable<DeviceInfo[]> {
+    const PAGE = 1024;
+    const fetchPage = (page: number, acc: DeviceInfo[]): Observable<DeviceInfo[]> =>
+      this.ctx.http.get<PageData<DeviceInfo>>(
+        `/api/tenant/devices?pageSize=${PAGE}&page=${page}`
+      ).pipe(
+        switchMap(res => {
+          const all = acc.concat(res?.data || []);
+          return res?.hasNext ? fetchPage(page + 1, all) : of(all);
+        })
+      );
+    return fetchPage(0, []);
+  }
+
+  private fetchCustomerDeviceInfos(): Observable<DeviceInfo[]> {
+    const ids = this.allCustomerIds;
+    if (ids.length === 0) return of([]);
+    return forkJoin(
+      ids.map(cid =>
+        this.ctx.http.get<PageData<DeviceInfo>>(
+          `/api/customer/${cid}/deviceInfos?pageSize=1024&page=0`
+        )
+      )
+    ).pipe(map(pages => pages.flatMap(p => p?.data || [])));
+  }
+
+  private buildLatestValueKeys(): string[] {
+    const keys = new Set<string>([
+      'offlineAlarmEnabled',
+      'inactivityTimeout',
+      'alarmDelay',
+      'alarmEmailList',
+      'alarmSmsList',
+      'alarmNotificationsEnabled'
+    ]);
+    Object.values(ALARM_CONFIG).forEach(profile => {
+      profile.thresholds.forEach(t => {
+        keys.add(t.key);
+        keys.add(this.cfService.hysteresisKey(t));
+        keys.add(this.cfService.cfKey(t));
+        keys.add(this.cfService.cfClearKey(t));
+        keys.add(`alarmConfig_${t.key}`);
+      });
+      (profile.digitals || []).forEach(d => {
+        keys.add(d.enabledAttributeKey);
+        keys.add(d.conditionAttributeKey);
+        keys.add(`alarmConfig_${d.key}`);
+      });
+    });
+    return Array.from(keys);
+  }
+
+  private fetchAttributesViaEntityQuery(deviceIds: string[]): Observable<Map<string, AttributeData[]>> {
+    if (deviceIds.length === 0) return of(new Map());
+    const keys = this.buildLatestValueKeys();
+    const PAGE_SIZE = 1024;
+
+    const entityFilter = this.isTenantAdmin
+      ? { type: 'entityType', entityType: 'DEVICE' }
+      : { type: 'entityList', entityType: 'DEVICE', entityList: deviceIds };
+
+    const fetchPage = (page: number, acc: any[]): Observable<any[]> => {
+      const body = {
+        entityFilter,
+        pageLink: {
+          pageSize: PAGE_SIZE,
+          page,
+          sortOrder: { key: { type: 'ENTITY_FIELD', key: 'createdTime' }, direction: 'DESC' }
+        },
+        latestValues: keys.map(k => ({ type: 'SERVER_ATTRIBUTE', key: k }))
+      };
+      return this.ctx.http.post<PageData<any>>('/api/entitiesQuery/find', body).pipe(
+        switchMap(res => {
+          const all = acc.concat(res?.data || []);
+          return res?.hasNext ? fetchPage(page + 1, all) : of(all);
+        })
+      );
+    };
+
+    return fetchPage(0, []).pipe(
+      map(rows => {
+        const byId = new Map<string, AttributeData[]>();
+        for (const row of rows) {
+          const id = row?.entityId?.id;
+          if (!id) continue;
+          const sa = row.latest?.SERVER_ATTRIBUTE || {};
+          const attrs: AttributeData[] = [];
+          for (const [k, v] of Object.entries<any>(sa)) {
+            const raw = v?.value;
+            if (raw === undefined || raw === null || raw === '') continue;
+            let value: any = raw;
+            if (raw === 'true') value = true;
+            else if (raw === 'false') value = false;
+            else if (k.startsWith('alarmConfig_') && typeof raw === 'string' && raw.startsWith('{')) {
+              try { value = JSON.parse(raw); } catch { /* keep raw string */ }
+            }
+            attrs.push({ key: k, value, lastUpdateTs: v.ts });
+          }
+          byId.set(id, attrs);
+        }
+        return byId;
+      })
+    );
   }
 
   private loadAttributesAndGroup(devices: DeviceInfo[], preferredProfileName: string | null = null) {
@@ -1007,39 +1124,10 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Collect unique profile IDs
-    const profileIds = new Set<string>();
-    devices.forEach(d => {
-      const pid = d.deviceProfileId?.id;
-      if (pid) profileIds.add(pid);
-    });
-
-    // Fetch attributes + profile names + alarm CFs in parallel
-    const attrRequests = devices.map(d =>
-      this.ctx.http.get<AttributeData[]>(
-        `/api/plugins/telemetry/DEVICE/${d.id.id}/values/attributes/SERVER_SCOPE`
-      )
-    );
-
-    const profileInfoRequests = Array.from(profileIds).map(pid =>
-      this.ctx.http.get<any>(`/api/deviceProfileInfo/${pid}`)
-    );
-
-    // const cfsByDevice$ = this.cfService.getForDevices(devices.map(d => d.id.id));
-
-    forkJoin([
-      forkJoin(attrRequests),
-      profileInfoRequests.length > 0 ? forkJoin(profileInfoRequests) : of([])
-    ]).pipe(takeUntil(this.destroy$)).subscribe({
-      next: ([allAttrs, profileInfos]: [AttributeData[][], any[]]) => {
-        // Build profile name lookup
-        const profileNameMap = new Map<string, string>();
-        const pidArray = Array.from(profileIds);
-        if (Array.isArray(profileInfos)) {
-          profileInfos.forEach((info, idx) => {
-            profileNameMap.set(pidArray[idx], info.name || 'Unknown');
-          });
-        }
+    this.fetchAttributesViaEntityQuery(devices.map(d => d.id.id))
+      .pipe(takeUntil(this.destroy$)).subscribe({
+      next: (attrsByDevice) => {
+        const allAttrs: AttributeData[][] = devices.map(d => attrsByDevice.get(d.id.id) || []);
 
         // Group devices by profile
         const profileMap = new Map<string, {
@@ -1053,8 +1141,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
           if (!profileId) return;
 
           if (!profileMap.has(profileId)) {
-            const profileName = profileNameMap.get(profileId) || device.type || 'Unknown';
-            // Look up config by profile name (case-insensitive match)
+            const profileName = device.type || 'Unknown';
             const configEntry = this.findConfig(profileName);
             profileMap.set(profileId, {
               profileName,
@@ -1102,8 +1189,35 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
               });
               config.thresholds.forEach(t => {
                 const cf = deviceCfs.get(t.alarmName);
-                attributes[t.key] = this.cfService.extractThresholdValue(cf, t);
-                attributes[this.cfService.hysteresisKey(t)] = this.cfService.extractHysteresis(cf, t);
+                const cfAttrVal = d.allAttrs.find(a => a.key === this.cfService.cfKey(t))?.value;
+                const fromAttr = cfAttrVal != null && cfAttrVal !== '' ? Number(cfAttrVal) : null;
+                let value: number | null = fromAttr != null && isFinite(fromAttr)
+                  ? fromAttr
+                  : this.cfService.extractThresholdValue(cf, t);
+                if (value == null) {
+                  // Legacy migration: device has no widget-managed attrs/CF, but a
+                  // plain `<key>` attribute may carry the original threshold from
+                  // a profile-level alarm rule. Use it as the displayed value so
+                  // the modal isn't empty on first open. Skip sentinel values
+                  // written by older widget saves.
+                  const plainVal = d.allAttrs.find(a => a.key === t.key)?.value;
+                  const fromPlain = plainVal != null && plainVal !== '' ? Number(plainVal) : null;
+                  if (fromPlain != null && isFinite(fromPlain) && Math.abs(fromPlain) < 999999) {
+                    value = fromPlain;
+                  }
+                }
+                attributes[t.key] = value;
+                const clearAttrVal = d.allAttrs.find(a => a.key === this.cfService.cfClearKey(t))?.value;
+                const liveClear = clearAttrVal != null && clearAttrVal !== '' ? Number(clearAttrVal) : null;
+                let hysteresis: number | null = null;
+                if (value != null && liveClear != null && isFinite(liveClear)) {
+                  const isHigh = t.operation === 'GREATER' || t.operation === 'GREATER_OR_EQUAL';
+                  const diff = isHigh ? value - liveClear : liveClear - value;
+                  hysteresis = diff > 0 ? diff : null;
+                } else {
+                  hysteresis = this.cfService.extractHysteresis(cf, t, value);
+                }
+                attributes[this.cfService.hysteresisKey(t)] = hysteresis;
               });
               const delay = this.cfService.extractDelay(deviceCfs, config.thresholds);
               attributes['alarmDelay'] = this.cfService.formatDelayLabel(delay);
@@ -1126,10 +1240,10 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
               const customerName = (d.info as any).ownerName
                 || (customerId ? this.customerNameById.get(customerId) : null)
                 || '';
-              const alarmsEnabledRaw = d.allAttrs.find(a => a.key === 'alarmsEnabled')?.value;
-              const alarmsEnabled =
-                alarmsEnabledRaw === false || alarmsEnabledRaw === 'false' ? false
-                : alarmsEnabledRaw === true || alarmsEnabledRaw === 'true' ? true
+              const alarmNotificationsEnabledRaw = d.allAttrs.find(a => a.key === 'alarmNotificationsEnabled')?.value;
+              const alarmNotificationsEnabled =
+                alarmNotificationsEnabledRaw === false || alarmNotificationsEnabledRaw === 'false' ? false
+                : alarmNotificationsEnabledRaw === true || alarmNotificationsEnabledRaw === 'true' ? true
                 : null;
               return {
                 deviceId: d.info.id.id,
@@ -1139,7 +1253,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
                 customerId,
                 customerName,
                 selected: false,
-                alarmsEnabled,
+                alarmNotificationsEnabled,
                 attributes,
                 alarmEmailList,
                 alarmSmsList,

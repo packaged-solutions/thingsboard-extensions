@@ -17,7 +17,8 @@ interface ReportVisuals {
 @Component({
   selector: 'tb-haccp-report',
   templateUrl: './haccp-report.component.html',
-  styleUrls: ['./haccp-report.component.scss']
+  styleUrls: ['./haccp-report.component.scss'],
+  standalone: false
 })
 export class HaccpReportComponent implements OnInit {
   @Input()
