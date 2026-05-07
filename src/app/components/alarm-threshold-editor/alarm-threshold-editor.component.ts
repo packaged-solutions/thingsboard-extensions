@@ -1166,7 +1166,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     return result;
   }
 
-  private buildLatestValueKeys(): string[] {
+  private buildLatestValueKeys(config: ProfileAlarmConfig): string[] {
     const keys = new Set<string>([
       'offlineAlarmEnabled',
       'inactivityTimeout',
@@ -1175,26 +1175,24 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       'alarmSmsList',
       'alarmNotificationsEnabled'
     ]);
-    Object.values(ALARM_CONFIG).forEach(profile => {
-      profile.thresholds.forEach(t => {
-        keys.add(t.key);
-        keys.add(this.cfService.hysteresisKey(t));
-        keys.add(this.cfService.cfKey(t));
-        keys.add(this.cfService.cfClearKey(t));
-        keys.add(`alarmConfig_${t.key}`);
-      });
-      (profile.digitals || []).forEach(d => {
-        keys.add(d.enabledAttributeKey);
-        keys.add(d.conditionAttributeKey);
-        keys.add(`alarmConfig_${d.key}`);
-      });
+    config.thresholds.forEach(t => {
+      keys.add(t.key);
+      keys.add(this.cfService.hysteresisKey(t));
+      keys.add(this.cfService.cfKey(t));
+      keys.add(this.cfService.cfClearKey(t));
+      keys.add(`alarmConfig_${t.key}`);
+    });
+    (config.digitals || []).forEach(d => {
+      keys.add(d.enabledAttributeKey);
+      keys.add(d.conditionAttributeKey);
+      keys.add(`alarmConfig_${d.key}`);
     });
     return Array.from(keys);
   }
 
-  private fetchAttributesViaEntityQuery(deviceIds: string[]): Observable<Map<string, AttributeData[]>> {
+  private fetchAttributesViaEntityQuery(deviceIds: string[], config: ProfileAlarmConfig): Observable<Map<string, AttributeData[]>> {
     if (deviceIds.length === 0) return of(new Map());
-    const keys = this.buildLatestValueKeys();
+    const keys = this.buildLatestValueKeys(config);
     const PAGE_SIZE = 1024;
 
     const entityFilter = { type: 'entityList', entityType: 'DEVICE', entityList: deviceIds };
@@ -1312,7 +1310,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     this.loading = true;
     const deviceIds = group.devices.map(d => d.deviceId);
 
-    this.fetchAttributesViaEntityQuery(deviceIds).pipe(takeUntil(this.destroy$)).subscribe({
+    this.fetchAttributesViaEntityQuery(deviceIds, group.config).pipe(takeUntil(this.destroy$)).subscribe({
       next: (attrsByDevice) => {
         group.devices.forEach(row => {
           const attrs = attrsByDevice.get(row.deviceId) || [];
