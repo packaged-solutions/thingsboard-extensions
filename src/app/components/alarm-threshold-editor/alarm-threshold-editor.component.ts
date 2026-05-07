@@ -1063,8 +1063,9 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
           const id = c?.id?.id;
           if (!id) continue;
           const name = c.title || 'Unnamed';
+          const parentCustomerId = c?.parentCustomerId?.id || null;
           this.customerNameById.set(id, name);
-          options.push({ id, name });
+          options.push({ id, name, parentCustomerId });
         }
         options.sort((a, b) => a.name.localeCompare(b.name));
         this.customers = options;
@@ -1120,6 +1121,16 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
   }
 
   private fetchDeviceInfosForCustomer(customerId: string): Observable<DeviceInfo[]> {
+    // A customer may be a parent in a hierarchy (e.g. "Network Rail" → "NR South East" → leaves).
+    // Devices live on the leaves, so we must fetch deviceInfos for the whole subtree.
+    const subtreeIds = this.collectCustomerSubtreeIds(customerId);
+    if (subtreeIds.length === 0) return of([]);
+    return forkJoin(
+      subtreeIds.map(cid => this.fetchDeviceInfosForSingleCustomer(cid))
+    ).pipe(map(pages => pages.flat()));
+  }
+
+  private fetchDeviceInfosForSingleCustomer(customerId: string): Observable<DeviceInfo[]> {
     const PAGE = 1024;
     const fetchPage = (page: number, acc: DeviceInfo[]): Observable<DeviceInfo[]> =>
       this.ctx.http.get<PageData<DeviceInfo>>(
@@ -1131,6 +1142,28 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
         })
       );
     return fetchPage(0, []);
+  }
+
+  private collectCustomerSubtreeIds(rootId: string): string[] {
+    const childrenByParent = new Map<string, string[]>();
+    for (const c of this.customers) {
+      if (!c.parentCustomerId) continue;
+      const arr = childrenByParent.get(c.parentCustomerId) || [];
+      arr.push(c.id);
+      childrenByParent.set(c.parentCustomerId, arr);
+    }
+    const result: string[] = [];
+    const queue: string[] = [rootId];
+    const seen = new Set<string>();
+    while (queue.length > 0) {
+      const cur = queue.shift()!;
+      if (seen.has(cur)) continue;
+      seen.add(cur);
+      result.push(cur);
+      const children = childrenByParent.get(cur) || [];
+      queue.push(...children);
+    }
+    return result;
   }
 
   private buildLatestValueKeys(): string[] {

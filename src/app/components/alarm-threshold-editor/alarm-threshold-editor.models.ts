@@ -69,4 +69,5 @@ export interface ProfileGroup {
 export interface CustomerOption {
   id: string;
   name: string;
+  parentCustomerId: string | null;
 }
