@@ -11,6 +11,7 @@ import { PageEvent } from '@angular/material/paginator';
 import { forkJoin, map, Observable, of, Subject, switchMap, takeUntil } from 'rxjs';
 import {
   AlarmDelay,
+  CustomerOption,
   DelayUnit,
   DeviceThresholdRow,
   DigitalConfig,
@@ -39,6 +40,10 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
   @Input() ctx: WidgetContext;
 
   isTenantAdmin = false;
+  customers: CustomerOption[] = [];
+  filteredCustomers: CustomerOption[] = [];
+  customerSearch: string | CustomerOption = '';
+  selectedCustomerId: string | null = null;
   profileGroups: ProfileGroup[] = [];
   filteredProfileGroups: ProfileGroup[] = [];
   profileSearch: string | ProfileGroup = '';
@@ -96,6 +101,8 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
   readonly delayUnits: DelayUnit[] = ['SECONDS', 'MINUTES', 'HOURS'];
 
   private readonly pageSizeStorageKey = 'alarmThresholdEditor.pageSize';
+  private readonly customerStorageKey = 'alarmThresholdEditor.customerId';
+  private readonly profileStorageKey = 'alarmThresholdEditor.profileName';
   private readonly allowedPageSizes = [10, 20, 30];
   page = 0;
   pageSize = this.readStoredPageSize();
@@ -104,7 +111,6 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
   private readonly defaultLowBatteryThreshold = 20;
   private cfService!: AlarmCalculatedFieldService;
   private customerNameById = new Map<string, string>();
-  private allCustomerIds: string[] = [];
 
   private applyBatteryDefault(values: { [key: string]: number | boolean | null }): void {
     const key = 'lowBatteryThreshold';
@@ -204,6 +210,46 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
   onInit() {}
   onDestroy() {}
 
+  // --- Customer selection ---
+
+  onCustomerAutoSelected(event: any) {
+    const customer: CustomerOption = event.option.value;
+    if (customer?.id && customer.id !== this.selectedCustomerId) {
+      this.selectCustomer(customer.id);
+    }
+  }
+
+  onCustomerInputFocus() {
+    this.filteredCustomers = this.customers;
+  }
+
+  displayCustomer = (c: CustomerOption | string): string => {
+    if (!c) return '';
+    if (typeof c === 'string') return c;
+    return c.name || '';
+  }
+
+  filterCustomers() {
+    const term = typeof this.customerSearch === 'string' ? this.customerSearch.toLowerCase() : '';
+    this.filteredCustomers = this.customers.filter(c =>
+      c.name.toLowerCase().includes(term)
+    );
+  }
+
+  private selectCustomer(customerId: string) {
+    this.selectedCustomerId = customerId;
+    const found = this.customers.find(c => c.id === customerId);
+    if (found) this.customerSearch = found;
+    this.persistSelectedCustomer(customerId);
+    this.profileGroups = [];
+    this.filteredProfileGroups = [];
+    this.profileSearch = '';
+    this.selectedProfileIndex = 0;
+    this.page = 0;
+    this.allSelected = false;
+    this.loadDeviceInfosForCustomer(customerId);
+  }
+
   // --- Profile (device type) selection ---
 
   onProfileAutoSelected(event: any) {
@@ -238,6 +284,13 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     this.bulkAttributeKey = '';
     this.bulkValue = null;
     this.profileSearch = this.profileGroups[index];
+    const group = this.profileGroups[index];
+    if (group) {
+      this.persistSelectedProfile(group.profileName);
+      if (!group.attributesLoaded) {
+        this.loadAttributesForGroup(group);
+      }
+    }
     this.ctx.detectChanges();
   }
 
@@ -263,6 +316,32 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     try {
       localStorage.setItem(this.pageSizeStorageKey, String(size));
     } catch { /* ignore storage errors */ }
+  }
+
+  private persistSelectedCustomer(id: string | null): void {
+    try {
+      if (id) localStorage.setItem(this.customerStorageKey, id);
+      else localStorage.removeItem(this.customerStorageKey);
+    } catch { /* ignore storage errors */ }
+  }
+
+  private readStoredCustomerId(): string | null {
+    try {
+      return localStorage.getItem(this.customerStorageKey);
+    } catch { return null; }
+  }
+
+  private persistSelectedProfile(name: string | null): void {
+    try {
+      if (name) localStorage.setItem(this.profileStorageKey, name);
+      else localStorage.removeItem(this.profileStorageKey);
+    } catch { /* ignore storage errors */ }
+  }
+
+  private readStoredProfileName(): string | null {
+    try {
+      return localStorage.getItem(this.profileStorageKey);
+    } catch { return null; }
   }
 
   // --- Selection ---
@@ -310,7 +389,11 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
 
   refreshData() {
     this.page = 0;
-    this.loadDevices();
+    if (this.selectedCustomerId) {
+      this.loadDeviceInfosForCustomer(this.selectedCustomerId);
+    } else {
+      this.loadCustomers();
+    }
   }
 
   // --- Edit dialog ---
@@ -973,17 +1056,29 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
         );
 
     customers$.pipe(takeUntil(this.destroy$)).subscribe({
-      next: (customers) => {
+      next: (rawCustomers) => {
         this.customerNameById.clear();
-        const ids: string[] = [];
-        for (const c of customers) {
+        const options: CustomerOption[] = [];
+        for (const c of rawCustomers) {
           const id = c?.id?.id;
           if (!id) continue;
-          this.customerNameById.set(id, c.title || 'Unnamed');
-          ids.push(id);
+          const name = c.title || 'Unnamed';
+          this.customerNameById.set(id, name);
+          options.push({ id, name });
         }
-        this.allCustomerIds = ids;
-        this.loadDevices();
+        options.sort((a, b) => a.name.localeCompare(b.name));
+        this.customers = options;
+        this.filteredCustomers = options;
+
+        if (options.length === 0) {
+          this.loading = false;
+          this.ctx.detectChanges();
+          return;
+        }
+
+        const stored = this.readStoredCustomerId();
+        const initial = (stored && options.some(o => o.id === stored)) ? stored : options[0].id;
+        this.selectCustomer(initial);
       },
       error: (err) => {
         console.error('[AlarmEditor] Failed to load customers:', err);
@@ -993,17 +1088,29 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     });
   }
 
-  private loadDevices() {
-    const previousProfileName = this.currentGroup?.profileName ?? null;
+  private loadDeviceInfosForCustomer(customerId: string) {
     this.loading = true;
     this.profileGroups = [];
+    this.filteredProfileGroups = [];
 
-    const fetch$ = this.isTenantAdmin
-      ? this.fetchTenantDeviceInfos()
-      : this.fetchCustomerDeviceInfos();
+    this.fetchDeviceInfosForCustomer(customerId).pipe(takeUntil(this.destroy$)).subscribe({
+      next: (devices) => {
+        this.profileGroups = this.buildSkeletonGroups(devices);
+        this.filteredProfileGroups = this.profileGroups;
 
-    fetch$.pipe(takeUntil(this.destroy$)).subscribe({
-      next: (devices) => this.loadAttributesAndGroup(devices, previousProfileName),
+        if (this.profileGroups.length === 0) {
+          this.loading = false;
+          this.profileSearch = '';
+          this.ctx.detectChanges();
+          return;
+        }
+
+        const preferred = this.readStoredProfileName();
+        const idx = preferred
+          ? this.profileGroups.findIndex(g => g.profileName === preferred)
+          : -1;
+        this.selectProfileIndex(idx >= 0 ? idx : 0);
+      },
       error: (err) => {
         console.error('[AlarmEditor] Failed to load devices:', err);
         this.loading = false;
@@ -1012,11 +1119,11 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     });
   }
 
-  private fetchTenantDeviceInfos(): Observable<DeviceInfo[]> {
+  private fetchDeviceInfosForCustomer(customerId: string): Observable<DeviceInfo[]> {
     const PAGE = 1024;
     const fetchPage = (page: number, acc: DeviceInfo[]): Observable<DeviceInfo[]> =>
       this.ctx.http.get<PageData<DeviceInfo>>(
-        `/api/tenant/devices?pageSize=${PAGE}&page=${page}`
+        `/api/customer/${customerId}/deviceInfos?pageSize=${PAGE}&page=${page}`
       ).pipe(
         switchMap(res => {
           const all = acc.concat(res?.data || []);
@@ -1024,18 +1131,6 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
         })
       );
     return fetchPage(0, []);
-  }
-
-  private fetchCustomerDeviceInfos(): Observable<DeviceInfo[]> {
-    const ids = this.allCustomerIds;
-    if (ids.length === 0) return of([]);
-    return forkJoin(
-      ids.map(cid =>
-        this.ctx.http.get<PageData<DeviceInfo>>(
-          `/api/customer/${cid}/deviceInfos?pageSize=1024&page=0`
-        )
-      )
-    ).pipe(map(pages => pages.flatMap(p => p?.data || [])));
   }
 
   private buildLatestValueKeys(): string[] {
@@ -1069,9 +1164,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     const keys = this.buildLatestValueKeys();
     const PAGE_SIZE = 1024;
 
-    const entityFilter = this.isTenantAdmin
-      ? { type: 'entityType', entityType: 'DEVICE' }
-      : { type: 'entityList', entityType: 'DEVICE', entityList: deviceIds };
+    const entityFilter = { type: 'entityList', entityType: 'DEVICE', entityList: deviceIds };
 
     const fetchPage = (page: number, acc: any[]): Observable<any[]> => {
       const body = {
@@ -1117,170 +1210,173 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     );
   }
 
-  private loadAttributesAndGroup(devices: DeviceInfo[], preferredProfileName: string | null = null) {
-    if (devices.length === 0) {
-      this.loading = false;
-      this.ctx.detectChanges();
+  private buildSkeletonGroups(devices: DeviceInfo[]): ProfileGroup[] {
+    const profileMap = new Map<string, {
+      profileName: string;
+      config: ProfileAlarmConfig | null;
+      devices: DeviceInfo[];
+    }>();
+
+    devices.forEach(device => {
+      const profileId = device.deviceProfileId?.id;
+      if (!profileId) return;
+      if (!profileMap.has(profileId)) {
+        const profileName = device.type || 'Unknown';
+        profileMap.set(profileId, {
+          profileName,
+          config: this.findConfig(profileName),
+          devices: []
+        });
+      }
+      profileMap.get(profileId).devices.push(device);
+    });
+
+    const groups: ProfileGroup[] = [];
+    profileMap.forEach((data, profileId) => {
+      if (!data.config) {
+        console.warn(`[AlarmEditor] No config found for profile "${data.profileName}", skipping`);
+        return;
+      }
+      groups.push({
+        profileId,
+        profileName: data.profileName,
+        config: data.config,
+        devices: data.devices.map(d => this.makeSkeletonRow(d, data.profileName)),
+        attributesLoaded: false
+      });
+    });
+
+    groups.sort((a, b) => a.profileName.localeCompare(b.profileName));
+    return groups;
+  }
+
+  private makeSkeletonRow(device: DeviceInfo, profileName: string): DeviceThresholdRow {
+    const customerId = device.customerId?.id || null;
+    const customerName = (device as any).ownerName
+      || (customerId ? this.customerNameById.get(customerId) : null)
+      || '';
+    return {
+      deviceId: device.id.id,
+      entityId: { entityType: EntityType.DEVICE, id: device.id.id } as EntityId,
+      deviceName: device.label || device.name,
+      deviceProfileName: profileName,
+      customerId,
+      customerName,
+      selected: false,
+      alarmNotificationsEnabled: null,
+      attributes: {},
+      alarmEmailList: [],
+      alarmSmsList: [],
+      cfAlarmKeys: new Set<string>()
+    };
+  }
+
+  private loadAttributesForGroup(group: ProfileGroup) {
+    if (group.devices.length === 0) {
+      group.attributesLoaded = true;
       return;
     }
+    this.loading = true;
+    const deviceIds = group.devices.map(d => d.deviceId);
 
-    this.fetchAttributesViaEntityQuery(devices.map(d => d.id.id))
-      .pipe(takeUntil(this.destroy$)).subscribe({
+    this.fetchAttributesViaEntityQuery(deviceIds).pipe(takeUntil(this.destroy$)).subscribe({
       next: (attrsByDevice) => {
-        const allAttrs: AttributeData[][] = devices.map(d => attrsByDevice.get(d.id.id) || []);
-
-        // Group devices by profile
-        const profileMap = new Map<string, {
-          profileName: string;
-          config: ProfileAlarmConfig | null;
-          devices: { info: DeviceInfo; allAttrs: AttributeData[] }[];
-        }>();
-
-        devices.forEach((device, i) => {
-          const profileId = device.deviceProfileId?.id;
-          if (!profileId) return;
-
-          if (!profileMap.has(profileId)) {
-            const profileName = device.type || 'Unknown';
-            const configEntry = this.findConfig(profileName);
-            profileMap.set(profileId, {
-              profileName,
-              config: configEntry,
-              devices: []
-            });
-          }
-
-          profileMap.get(profileId).devices.push({ info: device, allAttrs: allAttrs[i] || [] });
+        group.devices.forEach(row => {
+          const attrs = attrsByDevice.get(row.deviceId) || [];
+          this.populateRowFromAttrs(row, attrs, group);
         });
-
-        // Build ProfileGroup array
-        const groups: ProfileGroup[] = [];
-        profileMap.forEach((data, profileId) => {
-          if (!data.config) {
-            console.warn(`[AlarmEditor] No config found for profile "${data.profileName}", skipping`);
-            return;
-          }
-
-          const config = data.config;
-          // Offline settings still live on SERVER_SCOPE attributes
-          const attrKeys = ['offlineAlarmEnabled', 'inactivityTimeout'];
-          (config.digitals || []).forEach(d => {
-            attrKeys.push(d.enabledAttributeKey, d.conditionAttributeKey);
-          });
-
-          groups.push({
-            profileId,
-            profileName: data.profileName,
-            config,
-            devices: data.devices.map(d => {
-              const attributes: { [key: string]: number | string | boolean | null } = {};
-              attrKeys.forEach(key => {
-                const attr = d.allAttrs.find(a => a.key === key);
-                attributes[key] = attr?.value ?? null;
-              });
-              const deviceCfs = new Map<string, any>();
-              const cfAlarmKeys = new Set<string>();
-              d.allAttrs.forEach(a => {
-                if (typeof a.key === 'string' && a.key.startsWith('alarmConfig_') && a.value) {
-                  const payload: any = a.value;
-                  if (payload?.name) deviceCfs.set(payload.name, payload);
-                  cfAlarmKeys.add(a.key.substring('alarmConfig_'.length));
-                }
-              });
-              config.thresholds.forEach(t => {
-                const cf = deviceCfs.get(t.alarmName);
-                const cfAttrVal = d.allAttrs.find(a => a.key === this.cfService.cfKey(t))?.value;
-                const fromAttr = cfAttrVal != null && cfAttrVal !== '' ? Number(cfAttrVal) : null;
-                let value: number | null = fromAttr != null && isFinite(fromAttr)
-                  ? fromAttr
-                  : this.cfService.extractThresholdValue(cf, t);
-                if (value == null) {
-                  // Legacy migration: device has no widget-managed attrs/CF, but a
-                  // plain `<key>` attribute may carry the original threshold from
-                  // a profile-level alarm rule. Use it as the displayed value so
-                  // the modal isn't empty on first open. Skip sentinel values
-                  // written by older widget saves.
-                  const plainVal = d.allAttrs.find(a => a.key === t.key)?.value;
-                  const fromPlain = plainVal != null && plainVal !== '' ? Number(plainVal) : null;
-                  if (fromPlain != null && isFinite(fromPlain) && Math.abs(fromPlain) < 999999) {
-                    value = fromPlain;
-                  }
-                }
-                attributes[t.key] = value;
-                const clearAttrVal = d.allAttrs.find(a => a.key === this.cfService.cfClearKey(t))?.value;
-                const liveClear = clearAttrVal != null && clearAttrVal !== '' ? Number(clearAttrVal) : null;
-                let hysteresis: number | null = null;
-                if (value != null && liveClear != null && isFinite(liveClear)) {
-                  const isHigh = t.operation === 'GREATER' || t.operation === 'GREATER_OR_EQUAL';
-                  const diff = isHigh ? value - liveClear : liveClear - value;
-                  hysteresis = diff > 0 ? diff : null;
-                } else {
-                  hysteresis = this.cfService.extractHysteresis(cf, t, value);
-                }
-                attributes[this.cfService.hysteresisKey(t)] = hysteresis;
-              });
-              const delay = this.cfService.extractDelay(deviceCfs, config.thresholds);
-              attributes['alarmDelay'] = this.cfService.formatDelayLabel(delay);
-              attributes['alarmDelayValue'] = delay?.value ?? null;
-              attributes['alarmDelayUnit'] = delay?.unit ?? null;
-
-              const emailAttr = d.allAttrs.find(a => a.key === 'alarmEmailList');
-              const emailRaw = emailAttr?.value || '';
-              const alarmEmailList = typeof emailRaw === 'string' && emailRaw.length > 0
-                ? emailRaw.split(',').map((e: string) => e.trim()).filter((e: string) => e.length > 0)
-                : [];
-
-              const smsAttr = d.allAttrs.find(a => a.key === 'alarmSmsList');
-              const smsRaw = smsAttr?.value || '';
-              const alarmSmsList = typeof smsRaw === 'string' && smsRaw.length > 0
-                ? smsRaw.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0)
-                : [];
-
-              const customerId = d.info.customerId?.id || null;
-              const customerName = (d.info as any).ownerName
-                || (customerId ? this.customerNameById.get(customerId) : null)
-                || '';
-              const alarmNotificationsEnabledRaw = d.allAttrs.find(a => a.key === 'alarmNotificationsEnabled')?.value;
-              const alarmNotificationsEnabled =
-                alarmNotificationsEnabledRaw === false || alarmNotificationsEnabledRaw === 'false' ? false
-                : alarmNotificationsEnabledRaw === true || alarmNotificationsEnabledRaw === 'true' ? true
-                : null;
-              return {
-                deviceId: d.info.id.id,
-                entityId: { entityType: EntityType.DEVICE, id: d.info.id.id } as EntityId,
-                deviceName: d.info.label || d.info.name,
-                deviceProfileName: data.profileName,
-                customerId,
-                customerName,
-                selected: false,
-                alarmNotificationsEnabled,
-                attributes,
-                alarmEmailList,
-                alarmSmsList,
-                cfAlarmKeys
-              };
-            })
-          });
-        });
-
-        groups.sort((a, b) => a.profileName.localeCompare(b.profileName));
-
-        this.profileGroups = groups;
-        this.filteredProfileGroups = groups;
-        const restoredIdx = preferredProfileName
-          ? groups.findIndex(g => g.profileName === preferredProfileName)
-          : -1;
-        this.selectedProfileIndex = restoredIdx >= 0 ? restoredIdx : 0;
-        this.profileSearch = groups[this.selectedProfileIndex] || '';
+        group.attributesLoaded = true;
         this.loading = false;
         this.ctx.detectChanges();
       },
       error: (err) => {
-        console.error('[AlarmEditor] Failed to load data:', err);
+        console.error('[AlarmEditor] Failed to load attributes:', err);
         this.loading = false;
         this.ctx.detectChanges();
       }
     });
+  }
+
+  private populateRowFromAttrs(row: DeviceThresholdRow, allAttrs: AttributeData[], group: ProfileGroup) {
+    const config = group.config;
+    const attributes: { [key: string]: number | string | boolean | null } = {};
+
+    const attrKeys = ['offlineAlarmEnabled', 'inactivityTimeout'];
+    (config.digitals || []).forEach(d => {
+      attrKeys.push(d.enabledAttributeKey, d.conditionAttributeKey);
+    });
+    attrKeys.forEach(key => {
+      const attr = allAttrs.find(a => a.key === key);
+      attributes[key] = attr?.value ?? null;
+    });
+
+    const deviceCfs = new Map<string, any>();
+    const cfAlarmKeys = new Set<string>();
+    allAttrs.forEach(a => {
+      if (typeof a.key === 'string' && a.key.startsWith('alarmConfig_') && a.value) {
+        const payload: any = a.value;
+        if (payload?.name) deviceCfs.set(payload.name, payload);
+        cfAlarmKeys.add(a.key.substring('alarmConfig_'.length));
+      }
+    });
+
+    config.thresholds.forEach(t => {
+      const cf = deviceCfs.get(t.alarmName);
+      const cfAttrVal = allAttrs.find(a => a.key === this.cfService.cfKey(t))?.value;
+      const fromAttr = cfAttrVal != null && cfAttrVal !== '' ? Number(cfAttrVal) : null;
+      let value: number | null = fromAttr != null && isFinite(fromAttr)
+        ? fromAttr
+        : this.cfService.extractThresholdValue(cf, t);
+      if (value == null) {
+        // Legacy migration: device has no widget-managed attrs/CF, but a
+        // plain `<key>` attribute may carry the original threshold from
+        // a profile-level alarm rule. Skip sentinel values written by
+        // older widget saves.
+        const plainVal = allAttrs.find(a => a.key === t.key)?.value;
+        const fromPlain = plainVal != null && plainVal !== '' ? Number(plainVal) : null;
+        if (fromPlain != null && isFinite(fromPlain) && Math.abs(fromPlain) < 999999) {
+          value = fromPlain;
+        }
+      }
+      attributes[t.key] = value;
+      const clearAttrVal = allAttrs.find(a => a.key === this.cfService.cfClearKey(t))?.value;
+      const liveClear = clearAttrVal != null && clearAttrVal !== '' ? Number(clearAttrVal) : null;
+      let hysteresis: number | null = null;
+      if (value != null && liveClear != null && isFinite(liveClear)) {
+        const isHigh = t.operation === 'GREATER' || t.operation === 'GREATER_OR_EQUAL';
+        const diff = isHigh ? value - liveClear : liveClear - value;
+        hysteresis = diff > 0 ? diff : null;
+      } else {
+        hysteresis = this.cfService.extractHysteresis(cf, t, value);
+      }
+      attributes[this.cfService.hysteresisKey(t)] = hysteresis;
+    });
+
+    const delay = this.cfService.extractDelay(deviceCfs, config.thresholds);
+    attributes['alarmDelay'] = this.cfService.formatDelayLabel(delay);
+    attributes['alarmDelayValue'] = delay?.value ?? null;
+    attributes['alarmDelayUnit'] = delay?.unit ?? null;
+
+    const emailAttr = allAttrs.find(a => a.key === 'alarmEmailList');
+    const emailRaw = emailAttr?.value || '';
+    row.alarmEmailList = typeof emailRaw === 'string' && emailRaw.length > 0
+      ? emailRaw.split(',').map((e: string) => e.trim()).filter((e: string) => e.length > 0)
+      : [];
+
+    const smsAttr = allAttrs.find(a => a.key === 'alarmSmsList');
+    const smsRaw = smsAttr?.value || '';
+    row.alarmSmsList = typeof smsRaw === 'string' && smsRaw.length > 0
+      ? smsRaw.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0)
+      : [];
+
+    const alarmNotificationsEnabledRaw = allAttrs.find(a => a.key === 'alarmNotificationsEnabled')?.value;
+    row.alarmNotificationsEnabled =
+      alarmNotificationsEnabledRaw === false || alarmNotificationsEnabledRaw === 'false' ? false
+      : alarmNotificationsEnabledRaw === true || alarmNotificationsEnabledRaw === 'true' ? true
+      : null;
+
+    row.attributes = attributes;
+    row.cfAlarmKeys = cfAlarmKeys;
   }
 
   private findConfig(profileName: string): ProfileAlarmConfig | null {

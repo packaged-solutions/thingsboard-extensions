@@ -63,4 +63,10 @@ export interface ProfileGroup {
   profileName: string;
   config: ProfileAlarmConfig;
   devices: DeviceThresholdRow[];
+  attributesLoaded?: boolean;
+}
+
+export interface CustomerOption {
+  id: string;
+  name: string;
 }

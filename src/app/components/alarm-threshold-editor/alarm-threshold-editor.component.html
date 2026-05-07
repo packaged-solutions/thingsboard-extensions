@@ -11,6 +11,22 @@
   <div class="toolbar-wrap">
   <div class="toolbar">
     <ng-container *ngIf="!searchOpen">
+      <mat-form-field *ngIf="customers.length > 1" class="profile-field dense-field">
+        <mat-label>Customer</mat-label>
+        <input matInput type="text"
+               [matAutocomplete]="customerAuto"
+               [(ngModel)]="customerSearch"
+               (ngModelChange)="filterCustomers()"
+               (focus)="onCustomerInputFocus()">
+        <mat-autocomplete #customerAuto="matAutocomplete"
+                          [displayWith]="displayCustomer"
+                          (optionSelected)="onCustomerAutoSelected($event)">
+          <mat-option *ngFor="let c of filteredCustomers" [value]="c">
+            {{ c.name }}
+          </mat-option>
+        </mat-autocomplete>
+      </mat-form-field>
+
       <mat-form-field *ngIf="profileGroups.length > 0" class="profile-field dense-field">
         <mat-label>Device Type</mat-label>
         <input matInput type="text"
