@@ -1176,8 +1176,6 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       'alarmNotificationsEnabled'
     ]);
     config.thresholds.forEach(t => {
-      keys.add(t.key);
-      keys.add(this.cfService.hysteresisKey(t));
       keys.add(this.cfService.cfKey(t));
       keys.add(this.cfService.cfClearKey(t));
       keys.add(`alarmConfig_${t.key}`);
@@ -1355,24 +1353,13 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       const cf = deviceCfs.get(t.alarmName);
       const cfAttrVal = allAttrs.find(a => a.key === this.cfService.cfKey(t))?.value;
       const fromAttr = cfAttrVal != null && cfAttrVal !== '' ? Number(cfAttrVal) : null;
-      let value: number | null = fromAttr != null && isFinite(fromAttr)
+      const value: number | null = fromAttr != null && isFinite(fromAttr)
         ? fromAttr
         : this.cfService.extractThresholdValue(cf, t);
-      if (value == null) {
-        // Legacy migration: device has no widget-managed attrs/CF, but a
-        // plain `<key>` attribute may carry the original threshold from
-        // a profile-level alarm rule. Skip sentinel values written by
-        // older widget saves.
-        const plainVal = allAttrs.find(a => a.key === t.key)?.value;
-        const fromPlain = plainVal != null && plainVal !== '' ? Number(plainVal) : null;
-        if (fromPlain != null && isFinite(fromPlain) && Math.abs(fromPlain) < 999999) {
-          value = fromPlain;
-        }
-      }
       attributes[t.key] = value;
       const clearAttrVal = allAttrs.find(a => a.key === this.cfService.cfClearKey(t))?.value;
       const liveClear = clearAttrVal != null && clearAttrVal !== '' ? Number(clearAttrVal) : null;
-      let hysteresis: number | null = null;
+      let hysteresis: number | null;
       if (value != null && liveClear != null && isFinite(liveClear)) {
         const isHigh = t.operation === 'GREATER' || t.operation === 'GREATER_OR_EQUAL';
         const diff = isHigh ? value - liveClear : liveClear - value;
