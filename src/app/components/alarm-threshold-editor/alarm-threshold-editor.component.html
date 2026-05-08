@@ -117,9 +117,9 @@
                     {{ t.label }}<span *ngIf="t.unit"> ({{ t.unit }})</span>
                     <ng-container *ngTemplateOutlet="sortArrow; context: { $implicit: t.key }"></ng-container>
                   </th>
-                  <th *ngFor="let dig of group.config.digitals || []" class="sortable" (click)="sortByColumn(dig.enabledAttributeKey)">
+                  <th *ngFor="let dig of group.config.digitals || []" class="sortable" (click)="sortByColumn(dig.conditionAttributeKey)">
                     {{ dig.label }}
-                    <ng-container *ngTemplateOutlet="sortArrow; context: { $implicit: dig.enabledAttributeKey }"></ng-container>
+                    <ng-container *ngTemplateOutlet="sortArrow; context: { $implicit: dig.conditionAttributeKey }"></ng-container>
                   </th>
                   <th class="sortable" (click)="sortByColumn('alarmDelay')">
                     Alarm Delay
@@ -224,11 +224,14 @@
 
         <div class="template-section-title">Thresholds</div>
         <div class="template-grid">
-          <div *ngFor="let t of group.config.thresholds" class="threshold-pair">
+          <div *ngFor="let t of group.config.thresholds"
+               class="threshold-pair"
+               [class.threshold-pair--pending-delete]="isPendingDelete(t.key)">
             <div class="threshold-pair-inputs">
               <mat-form-field class="dense-field threshold-input">
                 <mat-label>{{ t.label }}</mat-label>
                 <input matInput type="number" (keydown)="restrictToNumber($event)" (paste)="restrictPasteToNumber($event)" step="any"
+                       [disabled]="isPendingDelete(t.key)"
                        [ngModel]="editForm.values[t.key]"
                        (ngModelChange)="editForm.values[t.key] = $event">
                 <span *ngIf="t.unit" matTextSuffix class="threshold-unit">{{ t.unit }}</span>
@@ -237,15 +240,28 @@
                               matTooltip="Optional. Clear rule fires when telemetry returns to threshold ± hysteresis. Leave blank to clear at the threshold.">
                 <mat-label>± Hysteresis</mat-label>
                 <input matInput type="number" (keydown)="restrictToNumber($event)" (paste)="restrictPasteToNumber($event)" min="0" step="any"
+                       [disabled]="isPendingDelete(t.key)"
                        [ngModel]="editForm.values[hysteresisKey(t)]"
                        (ngModelChange)="editForm.values[hysteresisKey(t)] = $event">
                 <span *ngIf="t.unit" matTextSuffix class="threshold-unit">{{ t.unit }}</span>
               </mat-form-field>
+              <button *ngIf="canDeleteRule(t.key)"
+                      mat-icon-button type="button"
+                      class="threshold-delete-btn"
+                      (click)="toggleDelete(t.key)"
+                      [matTooltip]="isPendingDelete(t.key) ? 'Keep alarm rule' : 'Disable alarm rule (value preserved)'">
+                <mat-icon>{{ isPendingDelete(t.key) ? 'notifications_active' : 'notifications_off' }}</mat-icon>
+              </button>
             </div>
-            <small *ngIf="thresholdPairError(t, editForm.values) as err; else previewLine"
-                   class="alarm-preview alarm-preview-error">{{ err }}</small>
-            <ng-template #previewLine>
-              <small class="alarm-preview">{{ alarmPreview(t, editForm.values) }}</small>
+            <small *ngIf="isPendingDelete(t.key); else thresholdMsg" class="alarm-preview alarm-preview-pending-delete">
+              Alarm rule will be disabled on save. Threshold value preserved.
+            </small>
+            <ng-template #thresholdMsg>
+              <small *ngIf="thresholdPairError(t, editForm.values) as err; else previewLine"
+                     class="alarm-preview alarm-preview-error">{{ err }}</small>
+              <ng-template #previewLine>
+                <small class="alarm-preview">{{ alarmPreview(t, editForm.values) }}</small>
+              </ng-template>
             </ng-template>
           </div>
         </div>
@@ -269,26 +285,16 @@
         <ng-container *ngIf="group.config.digitals?.length">
           <div class="template-section-title">Digital Alarms</div>
           <div class="template-digitals">
-            <div *ngFor="let dig of group.config.digitals" class="template-digital-row">
+            <div *ngFor="let dig of group.config.digitals"
+                 class="template-digital-row"
+                 [class.template-digital-row--pending-delete]="isPendingDelete(dig.key)">
               <div class="template-digital-label" [matTooltip]="dig.alarmName">{{ dig.label }}</div>
-              <mat-checkbox *ngIf="!bulkEdit"
-                            [checked]="editForm.digitals[dig.key]?.enabled === true"
-                            (change)="ensureEditDigital(dig.key); editForm.digitals[dig.key].enabled = $event.checked">
-                Enabled
-              </mat-checkbox>
-              <mat-form-field *ngIf="bulkEdit" class="dense-field digital-condition-field">
-                <mat-label>State</mat-label>
-                <mat-select [value]="editForm.digitals[dig.key]?.enabled"
-                            (selectionChange)="ensureEditDigital(dig.key); editForm.digitals[dig.key].enabled = $event.value">
-                  <mat-option [value]="null">Don't change</mat-option>
-                  <mat-option [value]="true">Enabled</mat-option>
-                  <mat-option [value]="false">Disabled</mat-option>
-                </mat-select>
-              </mat-form-field>
               <mat-form-field *ngIf="dig.statusValueType === 'BOOLEAN'" class="dense-field digital-condition-field">
                 <mat-label>Active when status is</mat-label>
                 <mat-select [value]="editForm.digitals[dig.key]?.condition"
+                            [disabled]="isPendingDelete(dig.key)"
                             (selectionChange)="ensureEditDigital(dig.key); editForm.digitals[dig.key].condition = $event.value">
+                  <mat-option *ngIf="bulkEdit" [value]="null">Don't change</mat-option>
                   <mat-option [value]="true">True</mat-option>
                   <mat-option [value]="false">False</mat-option>
                 </mat-select>
@@ -296,9 +302,20 @@
               <mat-form-field *ngIf="dig.statusValueType === 'NUMERIC'" class="dense-field digital-condition-field">
                 <mat-label>Active when status equals</mat-label>
                 <input matInput type="number" (keydown)="restrictToNumber($event)" (paste)="restrictPasteToNumber($event)" step="any"
+                       [disabled]="isPendingDelete(dig.key)"
                        [ngModel]="editForm.digitals[dig.key]?.condition"
                        (ngModelChange)="ensureEditDigital(dig.key); editForm.digitals[dig.key].condition = $event">
               </mat-form-field>
+              <button *ngIf="canDeleteRule(dig.key)"
+                      mat-icon-button type="button"
+                      class="threshold-delete-btn"
+                      (click)="toggleDelete(dig.key)"
+                      [matTooltip]="isPendingDelete(dig.key) ? 'Keep alarm rule' : 'Disable alarm rule (value preserved)'">
+                <mat-icon>{{ isPendingDelete(dig.key) ? 'notifications_active' : 'notifications_off' }}</mat-icon>
+              </button>
+              <small *ngIf="isPendingDelete(dig.key)" class="alarm-preview alarm-preview-pending-delete digital-pending-delete-msg">
+                Alarm rule will be disabled on save. Condition preserved.
+              </small>
             </div>
           </div>
         </ng-container>

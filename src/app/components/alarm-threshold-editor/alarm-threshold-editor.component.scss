@@ -380,7 +380,7 @@
 
   .threshold-pair-inputs {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 32px;
     column-gap: 8px;
     align-items: flex-start;
   }
@@ -401,17 +401,52 @@
     }
   }
 
-  .alarm-preview {
-    font-size: 11px;
-    color: rgba(0, 0, 0, 0.6);
-    padding-left: 2px;
-    min-height: 14px;
-    margin-top: -16px;
-    margin-bottom: 10px;
+  .threshold-delete-btn {
+    width: 32px;
+    height: 32px;
+    line-height: 32px;
+    padding: 0;
+    margin-top: 6px;
+    color: rgba(0, 0, 0, 0.54);
 
-    &.alarm-preview-error {
+    mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+    }
+
+    &:hover {
       color: #d32f2f;
     }
+  }
+
+  &.threshold-pair--pending-delete {
+    .threshold-input,
+    .hysteresis-input {
+      opacity: 0.5;
+    }
+
+    .threshold-delete-btn {
+      color: #d32f2f;
+    }
+  }
+}
+
+.alarm-preview {
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.6);
+  padding-left: 2px;
+  min-height: 14px;
+  margin-top: -16px;
+  margin-bottom: 10px;
+
+  &.alarm-preview-error {
+    color: #d32f2f;
+  }
+
+  &.alarm-preview-pending-delete {
+    color: #d32f2f;
+    font-style: italic;
   }
 }
 
@@ -429,10 +464,44 @@
 
 .template-digital-row {
   display: grid;
-  grid-template-columns: 140px auto 1fr;
+  grid-template-columns: 140px 1fr 32px;
   align-items: center;
   gap: 12px;
   min-height: 48px;
+
+  .threshold-delete-btn {
+    width: 32px;
+    height: 32px;
+    line-height: 32px;
+    padding: 0;
+    color: rgba(0, 0, 0, 0.54);
+
+    mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+    }
+
+    &:hover {
+      color: #d32f2f;
+    }
+  }
+
+  .digital-pending-delete-msg {
+    grid-column: 1 / -1;
+    margin: 0;
+    padding-left: 2px;
+  }
+
+  &.template-digital-row--pending-delete {
+    .digital-condition-field {
+      opacity: 0.5;
+    }
+
+    .threshold-delete-btn {
+      color: #d32f2f;
+    }
+  }
 }
 
 .template-digital-label {

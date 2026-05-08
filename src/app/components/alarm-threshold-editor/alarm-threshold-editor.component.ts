@@ -87,15 +87,16 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     sms: string;
     delayValue: number | null;
     delayUnit: DelayUnit;
-    digitals: { [digitalKey: string]: { enabled: boolean | null; condition: boolean | number | null } };
+    digitals: { [digitalKey: string]: { condition: boolean | number | null } };
+    deletes: Set<string>;
     original: {
       values: { [key: string]: number | boolean | null };
       delayValue: number | null;
       delayUnit: DelayUnit;
-      digitals: { [digitalKey: string]: { enabled: boolean | null; condition: boolean | number | null } };
+      digitals: { [digitalKey: string]: { condition: boolean | number | null } };
     };
   } = {
-    values: {}, emails: '', sms: '', delayValue: null, delayUnit: 'MINUTES', digitals: {},
+    values: {}, emails: '', sms: '', delayValue: null, delayUnit: 'MINUTES', digitals: {}, deletes: new Set<string>(),
     original: { values: {}, delayValue: null, delayUnit: 'MINUTES', digitals: {} }
   };
   readonly delayUnits: DelayUnit[] = ['SECONDS', 'MINUTES', 'HOURS'];
@@ -411,9 +412,9 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     values['inactivityTimeout'] = null;
     values['alarmNotificationsEnabled'] = null;
 
-    const digitals: { [k: string]: { enabled: boolean | null; condition: boolean | number | null } } = {};
+    const digitals: { [k: string]: { condition: boolean | number | null } } = {};
     (group.config.digitals || []).forEach(dig => {
-      digitals[dig.key] = { enabled: null, condition: null };
+      digitals[dig.key] = { condition: null };
     });
 
     this.editingDevice = null;
@@ -425,6 +426,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       delayValue: null,
       delayUnit: 'MINUTES',
       digitals,
+      deletes: new Set<string>(),
       original: { values: { ...values }, delayValue: null, delayUnit: 'MINUTES', digitals: {} }
     };
     this.editDialogOpen = true;
@@ -459,15 +461,10 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     values['inactivityTimeout'] = this.msToMin(inactivityMs);
     values['alarmNotificationsEnabled'] = device.alarmNotificationsEnabled !== false;
 
-    const digitals: { [k: string]: { enabled: boolean | null; condition: boolean | number | null } } = {};
+    const digitals: { [k: string]: { condition: boolean | number | null } } = {};
     (group.config.digitals || []).forEach(dig => {
-      const enabledRaw = device.attributes[dig.enabledAttributeKey];
       const conditionRaw = device.attributes[dig.conditionAttributeKey];
       digitals[dig.key] = {
-        enabled:
-          enabledRaw === true || enabledRaw === 'true' ? true
-          : enabledRaw === false || enabledRaw === 'false' ? false
-          : null,
         condition: conditionRaw == null ? null
           : dig.statusValueType === 'BOOLEAN'
             ? (conditionRaw === true || conditionRaw === 'true')
@@ -489,14 +486,15 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       delayValue: initialDelayValue,
       delayUnit: initialDelayUnit,
       digitals,
+      deletes: new Set<string>(),
       original: {
         values: { ...values },
         delayValue: initialDelayValue,
         delayUnit: initialDelayUnit,
         digitals: Object.keys(digitals).reduce((acc, k) => {
-          acc[k] = { enabled: digitals[k].enabled, condition: digitals[k].condition };
+          acc[k] = { condition: digitals[k].condition };
           return acc;
-        }, {} as { [k: string]: { enabled: boolean | null; condition: boolean | number | null } })
+        }, {} as { [k: string]: { condition: boolean | number | null } })
       }
     };
     this.editDialogOpen = true;
@@ -512,7 +510,23 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
 
   ensureEditDigital(key: string): void {
     if (!this.editForm.digitals[key]) {
-      this.editForm.digitals[key] = { enabled: null, condition: null };
+      this.editForm.digitals[key] = { condition: null };
+    }
+  }
+
+  canDeleteRule(key: string): boolean {
+    return !this.bulkEdit && !!this.editingDevice?.cfAlarmKeys.has(key);
+  }
+
+  isPendingDelete(key: string): boolean {
+    return this.editForm.deletes.has(key);
+  }
+
+  toggleDelete(key: string): void {
+    if (this.editForm.deletes.has(key)) {
+      this.editForm.deletes.delete(key);
+    } else {
+      this.editForm.deletes.add(key);
     }
   }
 
@@ -521,7 +535,9 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     const device = this.editingDevice;
     if (!group || !device) return;
 
+    const deletes = this.editForm.deletes;
     const thresholdsToApply: ThresholdConfig[] = group.config.thresholds.filter(t => {
+      if (deletes.has(t.key)) return false;
       const v = this.editForm.values[t.key];
       return v != null && v !== ('' as any);
     });
@@ -548,12 +564,13 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     const applyAlarmNotificationsEnabled = alarmNotificationsEnabledValue !== alarmNotificationsEnabledOriginal;
 
     const digitalsToApply = (group.config.digitals || []).filter(d => {
+      if (this.editForm.deletes.has(d.key)) return false;
       const state = this.editForm.digitals[d.key];
-      return state && (typeof state.enabled === 'boolean' || state.condition != null);
+      return state && state.condition != null;
     });
 
     if (
-      thresholdsToApply.length === 0 && !applyEmails && !applySms && !applyOfflineEnabled
+      thresholdsToApply.length === 0 && deletes.size === 0 && !applyEmails && !applySms && !applyOfflineEnabled
       && !applyOfflineTimeout && !applyAlarmNotificationsEnabled && digitalsToApply.length === 0
     ) {
       this.closeEdit();
@@ -601,9 +618,6 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
         }
         digitalsToApply.forEach(dig => {
           const state = this.editForm.digitals[dig.key];
-          if (typeof state.enabled === 'boolean') {
-            requests.push(this.saveAttribute(device.deviceId, dig.enabledAttributeKey, state.enabled));
-          }
           if (state.condition != null) {
             requests.push(this.saveAttribute(device.deviceId, dig.conditionAttributeKey, state.condition as boolean | number));
           }
@@ -623,6 +637,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
         const numOrNull = (v: any): number | null =>
           v == null || v === '' ? null : Number(v);
         group.config.thresholds.forEach(t => {
+          if (deletes.has(t.key)) return;
           const before = original.values[t.key] ?? null;
           const after = this.editForm.values[t.key] ?? null;
           const hKey = this.cfService.hysteresisKey(t);
@@ -635,16 +650,17 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
           }
         });
         (group.config.digitals || []).forEach(d => {
-          const before = original.digitals[d.key] || { enabled: null, condition: null };
-          const after = this.editForm.digitals[d.key] || { enabled: null, condition: null };
-          const stateChanged = before.enabled !== after.enabled || before.condition !== after.condition;
-          const hasState = typeof after.enabled === 'boolean' || after.condition != null;
+          if (deletes.has(d.key)) return;
+          const before = original.digitals[d.key] || { condition: null };
+          const after = this.editForm.digitals[d.key] || { condition: null };
+          const stateChanged = before.condition !== after.condition;
+          const hasState = after.condition != null;
           if (stateChanged || (hasState && !hasExistingCf(d.key))) {
             changedAlarmKeys.add(d.key);
           }
         });
         const alarmConfigBody = this.buildAlarmConfigBody(
-          device.deviceId, group, this.editForm.values, delay, this.editForm.digitals, changedAlarmKeys
+          device.deviceId, group, this.editForm.values, delay, this.editForm.digitals, changedAlarmKeys, deletes
         );
         if (Object.keys(alarmConfigBody).length > 0) {
           requests.push(this.saveAttributes(device.deviceId, alarmConfigBody));
@@ -685,14 +701,12 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
         }
         digitalsToApply.forEach(dig => {
           const state = this.editForm.digitals[dig.key];
-          if (typeof state.enabled === 'boolean') {
-            device.attributes[dig.enabledAttributeKey] = state.enabled;
-          }
           if (state.condition != null) {
             device.attributes[dig.conditionAttributeKey] = state.condition as boolean | number;
           }
         });
         changedAlarmKeys.forEach(k => device.cfAlarmKeys.add(k));
+        deletes.forEach(k => device.cfAlarmKeys.delete(k));
         this.saving = false;
         this.closeEdit();
       },
@@ -737,7 +751,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
 
     const digitalsToApply = (group.config.digitals || []).filter(d => {
       const state = this.editForm.digitals?.[d.key];
-      return state && (typeof state.enabled === 'boolean' || state.condition != null);
+      return state && state.condition != null;
     });
 
     if (
@@ -786,9 +800,6 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
           }
           digitalsToApply.forEach(dig => {
             const state = this.editForm.digitals[dig.key];
-            if (typeof state.enabled === 'boolean') {
-              requests.push(this.saveAttribute(device.deviceId, dig.enabledAttributeKey, state.enabled));
-            }
             if (state.condition != null) {
               requests.push(this.saveAttribute(device.deviceId, dig.conditionAttributeKey, state.condition as boolean | number));
             }
@@ -836,9 +847,6 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
           }
           digitalsToApply.forEach(dig => {
             const state = this.editForm.digitals[dig.key];
-            if (typeof state.enabled === 'boolean') {
-              d.attributes[dig.enabledAttributeKey] = state.enabled;
-            }
             if (state.condition != null) {
               d.attributes[dig.conditionAttributeKey] = state.condition as boolean | number;
             }
@@ -863,9 +871,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
   }
 
   isDigitalConfigured(device: DeviceThresholdRow, dig: DigitalConfig): boolean {
-    const enabled = device.attributes[dig.enabledAttributeKey];
-    const condition = device.attributes[dig.conditionAttributeKey];
-    return enabled != null || condition != null;
+    return device.attributes[dig.conditionAttributeKey] != null;
   }
 
   hysteresisKey(t: ThresholdConfig): string {
@@ -960,12 +966,9 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
   }
 
   digitalSummary(device: DeviceThresholdRow, dig: DigitalConfig): string {
-    const enabledRaw = device.attributes[dig.enabledAttributeKey];
     const conditionRaw = device.attributes[dig.conditionAttributeKey];
-    if (enabledRaw == null && conditionRaw == null) return '—';
-    const enabled = enabledRaw === true || enabledRaw === 'true' ? 'on' : 'off';
-    const condStr = conditionRaw == null ? '?' : String(conditionRaw);
-    return `${enabled} · =${condStr}`;
+    if (conditionRaw == null) return '—';
+    return `=${String(conditionRaw)}`;
   }
 
   msToMin(value: number | string | boolean | null | undefined): number | null {
@@ -1011,11 +1014,19 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     group: ProfileGroup,
     values: { [key: string]: number | boolean | null },
     delay: AlarmDelay | null,
-    digitalStates: { [k: string]: { enabled: boolean | null; condition: boolean | number | null } },
-    changedAlarmKeys?: Set<string>
+    digitalStates: { [k: string]: { condition: boolean | number | null } },
+    changedAlarmKeys?: Set<string>,
+    deletes?: Set<string>
   ): { [key: string]: any } {
     const body: { [key: string]: any } = {};
     group.config.thresholds.forEach(t => {
+      if (deletes?.has(t.key)) {
+        // Sentinel consumed by the "Make Calculated Fields From Attribute" rule chain's
+        // delete branch — it DELETEs the CF and sweeps alarmConfig_/alarmConfigRef_,
+        // leaving cf<Key>/cf<Key>Clear intact so the value is preserved for re-enable.
+        body[`alarmConfig_${t.key}`] = { _delete: true, name: t.alarmName };
+        return;
+      }
       const v = values[t.key];
       if (v == null || v === ('' as any)) return;
       const num = Number(v);
@@ -1033,10 +1044,18 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       body[`alarmConfig_${t.key}`] = this.cfService.buildThresholdPayload(deviceId, t, num, delay, hysteresis);
     });
     (group.config.digitals || []).forEach(d => {
+      if (deletes?.has(d.key)) {
+        body[`alarmConfig_${d.key}`] = { _delete: true, name: d.alarmName };
+        return;
+      }
       const state = digitalStates?.[d.key];
-      if (state && (typeof state.enabled === 'boolean' || state.condition != null)) {
+      if (state && state.condition != null) {
         if (changedAlarmKeys && !changedAlarmKeys.has(d.key)) return;
         body[`alarmConfig_${d.key}`] = this.cfService.buildDigitalPayload(deviceId, d);
+        // Sentinel: same role as the numeric sentinel for thresholds. Suppresses any
+        // profile-level digital alarm rule that reads this attribute. Our own CF no
+        // longer references it.
+        body[d.enabledAttributeKey] = false;
       }
     });
     return body;
@@ -1181,7 +1200,6 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       keys.add(`alarmConfig_${t.key}`);
     });
     (config.digitals || []).forEach(d => {
-      keys.add(d.enabledAttributeKey);
       keys.add(d.conditionAttributeKey);
       keys.add(`alarmConfig_${d.key}`);
     });
@@ -1332,7 +1350,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
 
     const attrKeys = ['offlineAlarmEnabled', 'inactivityTimeout'];
     (config.digitals || []).forEach(d => {
-      attrKeys.push(d.enabledAttributeKey, d.conditionAttributeKey);
+      attrKeys.push(d.conditionAttributeKey);
     });
     attrKeys.forEach(key => {
       const attr = allAttrs.find(a => a.key === key);

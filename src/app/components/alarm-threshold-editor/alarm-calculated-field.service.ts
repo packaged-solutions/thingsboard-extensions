@@ -143,10 +143,19 @@ export class AlarmCalculatedFieldService {
 
   buildDigitalPayload(deviceId: string, digital: DigitalConfig): any {
     const statusArg = digital.statusTelemetryKey;
-    const enabledArg = digital.enabledAttributeKey;
     const conditionArg = digital.conditionAttributeKey;
     const predicateType = digital.statusValueType === 'BOOLEAN' ? 'BOOLEAN' : 'NUMERIC';
     const details = this.digitalAlarmDetails(digital);
+    const statusFilter = (op: 'EQUAL' | 'NOT_EQUAL') => ({
+      argument: statusArg,
+      valueType: predicateType,
+      operation: 'AND',
+      predicates: [{
+        type: predicateType,
+        operation: op,
+        value: { staticValue: null, dynamicValueArgument: conditionArg }
+      }]
+    });
 
     return {
       type: 'ALARM',
@@ -161,10 +170,6 @@ export class AlarmCalculatedFieldService {
             refEntityKey: { key: conditionArg, type: 'ATTRIBUTE', scope: 'SERVER_SCOPE' },
             defaultValue: ''
           },
-          [enabledArg]: {
-            refEntityKey: { key: enabledArg, type: 'ATTRIBUTE', scope: 'SERVER_SCOPE' },
-            defaultValue: 'false'
-          },
           [statusArg]: {
             refEntityKey: { key: statusArg, type: 'TS_LATEST' },
             defaultValue: ''
@@ -176,28 +181,7 @@ export class AlarmCalculatedFieldService {
               type: 'SIMPLE',
               expression: {
                 type: 'SIMPLE',
-                filters: [
-                  {
-                    argument: enabledArg,
-                    valueType: 'BOOLEAN',
-                    operation: 'AND',
-                    predicates: [{
-                      type: 'BOOLEAN',
-                      operation: 'EQUAL',
-                      value: { staticValue: true, dynamicValueArgument: null }
-                    }]
-                  },
-                  {
-                    argument: statusArg,
-                    valueType: predicateType,
-                    operation: 'AND',
-                    predicates: [{
-                      type: predicateType,
-                      operation: 'EQUAL',
-                      value: { staticValue: null, dynamicValueArgument: conditionArg }
-                    }]
-                  }
-                ],
+                filters: [statusFilter('EQUAL')],
                 operation: 'AND'
               },
               schedule: null
@@ -211,29 +195,8 @@ export class AlarmCalculatedFieldService {
             type: 'SIMPLE',
             expression: {
               type: 'SIMPLE',
-              filters: [
-                {
-                  argument: enabledArg,
-                  valueType: 'BOOLEAN',
-                  operation: 'AND',
-                  predicates: [{
-                    type: 'BOOLEAN',
-                    operation: 'EQUAL',
-                    value: { staticValue: false, dynamicValueArgument: null }
-                  }]
-                },
-                {
-                  argument: statusArg,
-                  valueType: predicateType,
-                  operation: 'AND',
-                  predicates: [{
-                    type: predicateType,
-                    operation: 'NOT_EQUAL',
-                    value: { staticValue: null, dynamicValueArgument: conditionArg }
-                  }]
-                }
-              ],
-              operation: 'OR'
+              filters: [statusFilter('NOT_EQUAL')],
+              operation: 'AND'
             },
             schedule: null
           },
