@@ -1445,6 +1445,10 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     allAttrs.forEach(a => {
       if (typeof a.key === 'string' && a.key.startsWith('alarmConfig_') && a.value) {
         const payload: any = a.value;
+        // Lingering disable sentinel — the rule chain is supposed to sweep
+        // alarmConfig_<key> after deleting the CF, but if it hasn't yet (or
+        // failed) we must not treat this as an active rule.
+        if (payload?._delete === true) return;
         if (payload?.name) deviceCfs.set(payload.name, payload);
         cfAlarmKeys.add(a.key.substring('alarmConfig_'.length));
       }
@@ -1501,7 +1505,8 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       }
     });
     (config.digitals || []).forEach(d => {
-      if (!cfAlarmKeys.has(d.key) && attributes[d.conditionAttributeKey] != null) {
+      if (cfAlarmKeys.has(d.key)) return;
+      if (attributes[d.conditionAttributeKey] != null) {
         disabledAlarmKeys.add(d.key);
       }
     });
