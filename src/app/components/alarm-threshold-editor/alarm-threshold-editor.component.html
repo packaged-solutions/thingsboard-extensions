@@ -226,12 +226,13 @@
         <div class="template-grid">
           <div *ngFor="let t of group.config.thresholds"
                class="threshold-pair"
-               [class.threshold-pair--pending-delete]="isPendingDelete(t.key)">
+               [class.threshold-pair--pending-delete]="isPendingDelete(t.key)"
+               [class.threshold-pair--disabled]="isDisabledRule(t.key) && !isPendingReenable(t.key)">
             <div class="threshold-pair-inputs">
               <mat-form-field class="dense-field threshold-input">
                 <mat-label>{{ t.label }}</mat-label>
                 <input matInput type="number" (keydown)="restrictToNumber($event)" (paste)="restrictPasteToNumber($event)" step="any"
-                       [disabled]="isPendingDelete(t.key)"
+                       [disabled]="areInputsLocked(t.key)"
                        [ngModel]="editForm.values[t.key]"
                        (ngModelChange)="editForm.values[t.key] = $event">
                 <span *ngIf="t.unit" matTextSuffix class="threshold-unit">{{ t.unit }}</span>
@@ -240,29 +241,32 @@
                               matTooltip="Optional. Clear rule fires when telemetry returns to threshold ± hysteresis. Leave blank to clear at the threshold.">
                 <mat-label>± Hysteresis</mat-label>
                 <input matInput type="number" (keydown)="restrictToNumber($event)" (paste)="restrictPasteToNumber($event)" min="0" step="any"
-                       [disabled]="isPendingDelete(t.key)"
+                       [disabled]="areInputsLocked(t.key)"
                        [ngModel]="editForm.values[hysteresisKey(t)]"
                        (ngModelChange)="editForm.values[hysteresisKey(t)] = $event">
                 <span *ngIf="t.unit" matTextSuffix class="threshold-unit">{{ t.unit }}</span>
               </mat-form-field>
-              <button *ngIf="canDeleteRule(t.key)"
+              <button *ngIf="canShowRuleToggle(t.key)"
                       mat-icon-button type="button"
                       class="threshold-delete-btn"
-                      (click)="toggleDelete(t.key)"
-                      [matTooltip]="isPendingDelete(t.key) ? 'Keep alarm rule' : 'Disable alarm rule (value preserved)'">
-                <mat-icon>{{ isPendingDelete(t.key) ? 'notifications_active' : 'notifications_off' }}</mat-icon>
+                      (click)="toggleRuleState(t.key)"
+                      [matTooltip]="ruleToggleTooltip(t.key)">
+                <mat-icon>{{ ruleToggleIcon(t.key) }}</mat-icon>
               </button>
             </div>
-            <small *ngIf="isPendingDelete(t.key); else thresholdMsg" class="alarm-preview alarm-preview-pending-delete">
-              Alarm rule will be disabled on save. Threshold value preserved.
-            </small>
-            <ng-template #thresholdMsg>
-              <small *ngIf="thresholdPairError(t, editForm.values) as err; else previewLine"
-                     class="alarm-preview alarm-preview-error">{{ err }}</small>
-              <ng-template #previewLine>
-                <small class="alarm-preview">{{ alarmPreview(t, editForm.values) }}</small>
-              </ng-template>
-            </ng-template>
+            <ng-container [ngSwitch]="thresholdMessageState(t)">
+              <small *ngSwitchCase="'pending-delete'" class="alarm-preview alarm-preview-pending-delete">
+                Alarm rule will be disabled on save. Threshold value preserved.
+              </small>
+              <small *ngSwitchCase="'pending-reenable'" class="alarm-preview alarm-preview-pending-reenable">
+                Alarm rule will be re-enabled on save.
+              </small>
+              <small *ngSwitchCase="'disabled'" class="alarm-preview alarm-preview-disabled">
+                Alarm rule is disabled. Click the bell to re-enable (value preserved).
+              </small>
+              <small *ngSwitchCase="'error'" class="alarm-preview alarm-preview-error">{{ thresholdPairError(t, editForm.values) }}</small>
+              <small *ngSwitchDefault class="alarm-preview">{{ alarmPreview(t, editForm.values) }}</small>
+            </ng-container>
           </div>
         </div>
 
@@ -287,12 +291,13 @@
           <div class="template-digitals">
             <div *ngFor="let dig of group.config.digitals"
                  class="template-digital-row"
-                 [class.template-digital-row--pending-delete]="isPendingDelete(dig.key)">
+                 [class.template-digital-row--pending-delete]="isPendingDelete(dig.key)"
+                 [class.template-digital-row--disabled]="isDisabledRule(dig.key) && !isPendingReenable(dig.key)">
               <div class="template-digital-label" [matTooltip]="dig.alarmName">{{ dig.label }}</div>
               <mat-form-field *ngIf="dig.statusValueType === 'BOOLEAN'" class="dense-field digital-condition-field">
                 <mat-label>Active when status is</mat-label>
                 <mat-select [value]="editForm.digitals[dig.key]?.condition"
-                            [disabled]="isPendingDelete(dig.key)"
+                            [disabled]="areInputsLocked(dig.key)"
                             (selectionChange)="ensureEditDigital(dig.key); editForm.digitals[dig.key].condition = $event.value">
                   <mat-option *ngIf="bulkEdit" [value]="null">Don't change</mat-option>
                   <mat-option [value]="true">True</mat-option>
@@ -302,20 +307,28 @@
               <mat-form-field *ngIf="dig.statusValueType === 'NUMERIC'" class="dense-field digital-condition-field">
                 <mat-label>Active when status equals</mat-label>
                 <input matInput type="number" (keydown)="restrictToNumber($event)" (paste)="restrictPasteToNumber($event)" step="any"
-                       [disabled]="isPendingDelete(dig.key)"
+                       [disabled]="areInputsLocked(dig.key)"
                        [ngModel]="editForm.digitals[dig.key]?.condition"
                        (ngModelChange)="ensureEditDigital(dig.key); editForm.digitals[dig.key].condition = $event">
               </mat-form-field>
-              <button *ngIf="canDeleteRule(dig.key)"
+              <button *ngIf="canShowRuleToggle(dig.key)"
                       mat-icon-button type="button"
                       class="threshold-delete-btn"
-                      (click)="toggleDelete(dig.key)"
-                      [matTooltip]="isPendingDelete(dig.key) ? 'Keep alarm rule' : 'Disable alarm rule (value preserved)'">
-                <mat-icon>{{ isPendingDelete(dig.key) ? 'notifications_active' : 'notifications_off' }}</mat-icon>
+                      (click)="toggleRuleState(dig.key)"
+                      [matTooltip]="ruleToggleTooltip(dig.key)">
+                <mat-icon>{{ ruleToggleIcon(dig.key) }}</mat-icon>
               </button>
-              <small *ngIf="isPendingDelete(dig.key)" class="alarm-preview alarm-preview-pending-delete digital-pending-delete-msg">
-                Alarm rule will be disabled on save. Condition preserved.
-              </small>
+              <ng-container [ngSwitch]="digitalMessageState(dig)">
+                <small *ngSwitchCase="'pending-delete'" class="alarm-preview alarm-preview-pending-delete digital-pending-delete-msg">
+                  Alarm rule will be disabled on save. Condition preserved.
+                </small>
+                <small *ngSwitchCase="'pending-reenable'" class="alarm-preview alarm-preview-pending-reenable digital-pending-delete-msg">
+                  Alarm rule will be re-enabled on save.
+                </small>
+                <small *ngSwitchCase="'disabled'" class="alarm-preview alarm-preview-disabled digital-pending-delete-msg">
+                  Alarm rule is disabled. Click the bell to re-enable (condition preserved).
+                </small>
+              </ng-container>
             </div>
           </div>
         </ng-container>

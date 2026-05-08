@@ -430,6 +430,21 @@
       color: #d32f2f;
     }
   }
+
+  &.threshold-pair--disabled {
+    .threshold-input,
+    .hysteresis-input {
+      opacity: 0.5;
+    }
+
+    .threshold-delete-btn {
+      color: rgba(0, 0, 0, 0.38);
+
+      &:hover {
+        color: #2e7d32;
+      }
+    }
+  }
 }
 
 .alarm-preview {
@@ -446,6 +461,16 @@
 
   &.alarm-preview-pending-delete {
     color: #d32f2f;
+    font-style: italic;
+  }
+
+  &.alarm-preview-disabled {
+    color: rgba(0, 0, 0, 0.54);
+    font-style: italic;
+  }
+
+  &.alarm-preview-pending-reenable {
+    color: #2e7d32;
     font-style: italic;
   }
 }
@@ -500,6 +525,20 @@
 
     .threshold-delete-btn {
       color: #d32f2f;
+    }
+  }
+
+  &.template-digital-row--disabled {
+    .digital-condition-field {
+      opacity: 0.5;
+    }
+
+    .threshold-delete-btn {
+      color: rgba(0, 0, 0, 0.38);
+
+      &:hover {
+        color: #2e7d32;
+      }
     }
   }
 }

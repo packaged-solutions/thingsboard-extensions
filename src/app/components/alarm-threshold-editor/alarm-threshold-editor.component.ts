@@ -89,6 +89,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     delayUnit: DelayUnit;
     digitals: { [digitalKey: string]: { condition: boolean | number | null } };
     deletes: Set<string>;
+    reenables: Set<string>;
     original: {
       values: { [key: string]: number | boolean | null };
       delayValue: number | null;
@@ -96,7 +97,8 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       digitals: { [digitalKey: string]: { condition: boolean | number | null } };
     };
   } = {
-    values: {}, emails: '', sms: '', delayValue: null, delayUnit: 'MINUTES', digitals: {}, deletes: new Set<string>(),
+    values: {}, emails: '', sms: '', delayValue: null, delayUnit: 'MINUTES', digitals: {},
+    deletes: new Set<string>(), reenables: new Set<string>(),
     original: { values: {}, delayValue: null, delayUnit: 'MINUTES', digitals: {} }
   };
   readonly delayUnits: DelayUnit[] = ['SECONDS', 'MINUTES', 'HOURS'];
@@ -427,6 +429,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       delayUnit: 'MINUTES',
       digitals,
       deletes: new Set<string>(),
+      reenables: new Set<string>(),
       original: { values: { ...values }, delayValue: null, delayUnit: 'MINUTES', digitals: {} }
     };
     this.editDialogOpen = true;
@@ -487,6 +490,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       delayUnit: initialDelayUnit,
       digitals,
       deletes: new Set<string>(),
+      reenables: new Set<string>(),
       original: {
         values: { ...values },
         delayValue: initialDelayValue,
@@ -518,8 +522,26 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     return !this.bulkEdit && !!this.editingDevice?.cfAlarmKeys.has(key);
   }
 
+  isDisabledRule(key: string): boolean {
+    return !this.bulkEdit && !!this.editingDevice?.disabledAlarmKeys.has(key);
+  }
+
+  canShowRuleToggle(key: string): boolean {
+    return this.canDeleteRule(key) || this.isDisabledRule(key);
+  }
+
   isPendingDelete(key: string): boolean {
     return this.editForm.deletes.has(key);
+  }
+
+  isPendingReenable(key: string): boolean {
+    return this.editForm.reenables.has(key);
+  }
+
+  // Inputs are locked when the row is "off" (will be off after save, or already off
+  // and not being re-enabled). Re-enabling unlocks so the user can revise the value.
+  areInputsLocked(key: string): boolean {
+    return this.isPendingDelete(key) || (this.isDisabledRule(key) && !this.isPendingReenable(key));
   }
 
   toggleDelete(key: string): void {
@@ -530,14 +552,63 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     }
   }
 
+  toggleReenable(key: string): void {
+    if (this.editForm.reenables.has(key)) {
+      this.editForm.reenables.delete(key);
+    } else {
+      this.editForm.reenables.add(key);
+    }
+  }
+
+  toggleRuleState(key: string): void {
+    if (this.isDisabledRule(key)) {
+      this.toggleReenable(key);
+    } else {
+      this.toggleDelete(key);
+    }
+  }
+
+  // Icon convention: glyph shows the action that *clicking* will perform.
+  ruleToggleIcon(key: string): string {
+    if (this.isDisabledRule(key)) {
+      return this.isPendingReenable(key) ? 'notifications_off' : 'notifications_active';
+    }
+    return this.isPendingDelete(key) ? 'notifications_active' : 'notifications_off';
+  }
+
+  ruleToggleTooltip(key: string): string {
+    if (this.isDisabledRule(key)) {
+      return this.isPendingReenable(key) ? 'Cancel re-enable' : 'Re-enable alarm rule (value preserved)';
+    }
+    return this.isPendingDelete(key) ? 'Keep alarm rule' : 'Disable alarm rule (value preserved)';
+  }
+
+  thresholdMessageState(t: ThresholdConfig): 'pending-delete' | 'pending-reenable' | 'disabled' | 'error' | 'preview' {
+    if (this.isPendingDelete(t.key)) return 'pending-delete';
+    if (this.isPendingReenable(t.key)) return 'pending-reenable';
+    if (this.isDisabledRule(t.key)) return 'disabled';
+    if (this.thresholdPairError(t, this.editForm.values)) return 'error';
+    return 'preview';
+  }
+
+  digitalMessageState(d: DigitalConfig): 'pending-delete' | 'pending-reenable' | 'disabled' | 'none' {
+    if (this.isPendingDelete(d.key)) return 'pending-delete';
+    if (this.isPendingReenable(d.key)) return 'pending-reenable';
+    if (this.isDisabledRule(d.key)) return 'disabled';
+    return 'none';
+  }
+
   saveEditDevice() {
     const group = this.currentGroup;
     const device = this.editingDevice;
     if (!group || !device) return;
 
     const deletes = this.editForm.deletes;
+    const reenables = this.editForm.reenables;
+    const isInactive = (key: string) => device.disabledAlarmKeys.has(key) && !reenables.has(key);
     const thresholdsToApply: ThresholdConfig[] = group.config.thresholds.filter(t => {
       if (deletes.has(t.key)) return false;
+      if (isInactive(t.key)) return false;
       const v = this.editForm.values[t.key];
       return v != null && v !== ('' as any);
     });
@@ -565,6 +636,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
 
     const digitalsToApply = (group.config.digitals || []).filter(d => {
       if (this.editForm.deletes.has(d.key)) return false;
+      if (isInactive(d.key)) return false;
       const state = this.editForm.digitals[d.key];
       return state && state.condition != null;
     });
@@ -638,6 +710,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
           v == null || v === '' ? null : Number(v);
         group.config.thresholds.forEach(t => {
           if (deletes.has(t.key)) return;
+          if (isInactive(t.key)) return;
           const before = original.values[t.key] ?? null;
           const after = this.editForm.values[t.key] ?? null;
           const hKey = this.cfService.hysteresisKey(t);
@@ -651,6 +724,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
         });
         (group.config.digitals || []).forEach(d => {
           if (deletes.has(d.key)) return;
+          if (isInactive(d.key)) return;
           const before = original.digitals[d.key] || { condition: null };
           const after = this.editForm.digitals[d.key] || { condition: null };
           const stateChanged = before.condition !== after.condition;
@@ -705,8 +779,16 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
             device.attributes[dig.conditionAttributeKey] = state.condition as boolean | number;
           }
         });
-        changedAlarmKeys.forEach(k => device.cfAlarmKeys.add(k));
-        deletes.forEach(k => device.cfAlarmKeys.delete(k));
+        changedAlarmKeys.forEach(k => {
+          device.cfAlarmKeys.add(k);
+          device.disabledAlarmKeys.delete(k);
+        });
+        deletes.forEach(k => {
+          device.cfAlarmKeys.delete(k);
+          // Disable preserves cf<Key>/condition attribute, so the rule is now disabled
+          // (re-enableable) rather than gone.
+          device.disabledAlarmKeys.add(k);
+        });
         this.saving = false;
         this.closeEdit();
       },
@@ -1314,7 +1396,8 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       attributes: {},
       alarmEmailList: [],
       alarmSmsList: [],
-      cfAlarmKeys: new Set<string>()
+      cfAlarmKeys: new Set<string>(),
+      disabledAlarmKeys: new Set<string>()
     };
   }
 
@@ -1411,8 +1494,21 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       : alarmNotificationsEnabledRaw === true || alarmNotificationsEnabledRaw === 'true' ? true
       : null;
 
+    const disabledAlarmKeys = new Set<string>();
+    config.thresholds.forEach(t => {
+      if (!cfAlarmKeys.has(t.key) && attributes[t.key] != null) {
+        disabledAlarmKeys.add(t.key);
+      }
+    });
+    (config.digitals || []).forEach(d => {
+      if (!cfAlarmKeys.has(d.key) && attributes[d.conditionAttributeKey] != null) {
+        disabledAlarmKeys.add(d.key);
+      }
+    });
+
     row.attributes = attributes;
     row.cfAlarmKeys = cfAlarmKeys;
+    row.disabledAlarmKeys = disabledAlarmKeys;
   }
 
   private findConfig(profileName: string): ProfileAlarmConfig | null {

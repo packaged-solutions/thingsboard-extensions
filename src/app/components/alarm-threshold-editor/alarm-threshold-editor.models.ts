@@ -56,6 +56,10 @@ export interface DeviceThresholdRow {
   alarmEmailList: string[];
   alarmSmsList: string[];
   cfAlarmKeys: Set<string>;
+  // Alarm keys whose value is preserved on the device (cf<Key> for thresholds,
+  // condition attribute for digitals) but whose alarmConfig_<key> is absent —
+  // i.e. the rule was previously configured then disabled.
+  disabledAlarmKeys: Set<string>;
 }
 
 export interface ProfileGroup {

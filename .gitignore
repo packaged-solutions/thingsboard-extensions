@@ -80,7 +80,8 @@ pom.xml.versionsBackup
 **/.env
 .instance_id
 rebuild-docker.sh
-
+1.png
+migration-brief.md
 # Compiled Scss
 
 style.comp.scss
