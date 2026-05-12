@@ -412,7 +412,6 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     });
     values['offlineAlarmEnabled'] = null;
     values['inactivityTimeout'] = null;
-    values['alarmNotificationsEnabled'] = null;
 
     const digitals: { [k: string]: { condition: boolean | number | null } } = {};
     (group.config.digitals || []).forEach(dig => {
@@ -462,7 +461,6 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       : null;
     const inactivityMs = device.attributes['inactivityTimeout'];
     values['inactivityTimeout'] = this.msToMin(inactivityMs);
-    values['alarmNotificationsEnabled'] = device.alarmNotificationsEnabled !== false;
 
     const digitals: { [k: string]: { condition: boolean | number | null } } = {};
     (group.config.digitals || []).forEach(dig => {
@@ -629,11 +627,6 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     const inactivityTimeoutMs = this.minToMs(offlineTimeoutRaw as number | null);
     const applyOfflineTimeout = inactivityTimeoutMs != null;
 
-    const alarmNotificationsEnabledForm = this.editForm.values['alarmNotificationsEnabled'];
-    const alarmNotificationsEnabledValue = typeof alarmNotificationsEnabledForm === 'boolean' ? alarmNotificationsEnabledForm : true;
-    const alarmNotificationsEnabledOriginal = this.editForm.original.values['alarmNotificationsEnabled'];
-    const applyAlarmNotificationsEnabled = alarmNotificationsEnabledValue !== alarmNotificationsEnabledOriginal;
-
     const digitalsToApply = (group.config.digitals || []).filter(d => {
       if (this.editForm.deletes.has(d.key)) return false;
       if (isInactive(d.key)) return false;
@@ -643,7 +636,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
 
     if (
       thresholdsToApply.length === 0 && deletes.size === 0 && !applyEmails && !applySms && !applyOfflineEnabled
-      && !applyOfflineTimeout && !applyAlarmNotificationsEnabled && digitalsToApply.length === 0
+      && !applyOfflineTimeout && digitalsToApply.length === 0
     ) {
       this.closeEdit();
       return;
@@ -684,9 +677,6 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
         }
         if (applyOfflineTimeout) {
           requests.push(this.saveAttribute(device.deviceId, 'inactivityTimeout', inactivityTimeoutMs as number));
-        }
-        if (applyAlarmNotificationsEnabled) {
-          requests.push(this.saveAttribute(device.deviceId, 'alarmNotificationsEnabled', alarmNotificationsEnabledValue));
         }
         digitalsToApply.forEach(dig => {
           const state = this.editForm.digitals[dig.key];
@@ -770,9 +760,6 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
         if (applyOfflineTimeout) {
           device.attributes['inactivityTimeout'] = inactivityTimeoutMs;
         }
-        if (applyAlarmNotificationsEnabled) {
-          device.alarmNotificationsEnabled = alarmNotificationsEnabledValue;
-        }
         digitalsToApply.forEach(dig => {
           const state = this.editForm.digitals[dig.key];
           if (state.condition != null) {
@@ -827,10 +814,6 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     const inactivityTimeoutMs = this.minToMs(offlineTimeoutRaw as number | null);
     const applyOfflineTimeout = inactivityTimeoutMs != null;
 
-    const alarmNotificationsEnabledRaw = this.editForm.values['alarmNotificationsEnabled'];
-    const applyAlarmNotificationsEnabled = typeof alarmNotificationsEnabledRaw === 'boolean';
-    const alarmNotificationsEnabledValue = applyAlarmNotificationsEnabled ? alarmNotificationsEnabledRaw as boolean : null;
-
     const digitalsToApply = (group.config.digitals || []).filter(d => {
       const state = this.editForm.digitals?.[d.key];
       return state && state.condition != null;
@@ -838,7 +821,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
 
     if (
       thresholdsToApply.length === 0 && !applyEmails && !applySms && !applyOfflineEnabled
-      && !applyOfflineTimeout && !applyAlarmNotificationsEnabled && digitalsToApply.length === 0
+      && !applyOfflineTimeout && digitalsToApply.length === 0
     ) {
       this.closeEdit();
       return;
@@ -876,9 +859,6 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
           }
           if (applyOfflineTimeout) {
             requests.push(this.saveAttribute(device.deviceId, 'inactivityTimeout', inactivityTimeoutMs as number));
-          }
-          if (applyAlarmNotificationsEnabled) {
-            requests.push(this.saveAttribute(device.deviceId, 'alarmNotificationsEnabled', alarmNotificationsEnabledValue as boolean));
           }
           digitalsToApply.forEach(dig => {
             const state = this.editForm.digitals[dig.key];
@@ -923,9 +903,6 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
           }
           if (applyOfflineTimeout) {
             d.attributes['inactivityTimeout'] = inactivityTimeoutMs;
-          }
-          if (applyAlarmNotificationsEnabled) {
-            d.alarmNotificationsEnabled = alarmNotificationsEnabledValue;
           }
           digitalsToApply.forEach(dig => {
             const state = this.editForm.digitals[dig.key];
@@ -1273,8 +1250,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       'inactivityTimeout',
       'alarmDelay',
       'alarmEmailList',
-      'alarmSmsList',
-      'alarmNotificationsEnabled'
+      'alarmSmsList'
     ]);
     config.thresholds.forEach(t => {
       keys.add(this.cfService.cfKey(t));
@@ -1392,7 +1368,6 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       customerId,
       customerName,
       selected: false,
-      alarmNotificationsEnabled: null,
       attributes: {},
       alarmEmailList: [],
       alarmSmsList: [],
@@ -1491,12 +1466,6 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     row.alarmSmsList = typeof smsRaw === 'string' && smsRaw.length > 0
       ? smsRaw.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0)
       : [];
-
-    const alarmNotificationsEnabledRaw = allAttrs.find(a => a.key === 'alarmNotificationsEnabled')?.value;
-    row.alarmNotificationsEnabled =
-      alarmNotificationsEnabledRaw === false || alarmNotificationsEnabledRaw === 'false' ? false
-      : alarmNotificationsEnabledRaw === true || alarmNotificationsEnabledRaw === 'true' ? true
-      : null;
 
     const disabledAlarmKeys = new Set<string>();
     config.thresholds.forEach(t => {

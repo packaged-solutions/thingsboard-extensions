@@ -333,25 +333,6 @@
           </div>
         </ng-container>
 
-        <div class="template-section-title">Notifications</div>
-        <div class="template-grid">
-          <div class="template-toggle" *ngIf="!bulkEdit">
-            <mat-checkbox [checked]="editForm.values['alarmNotificationsEnabled'] !== false"
-                          (change)="editForm.values['alarmNotificationsEnabled'] = $event.checked">
-              Send alarm notifications for this device
-            </mat-checkbox>
-          </div>
-          <mat-form-field class="dense-field" *ngIf="bulkEdit">
-            <mat-label>Alarms</mat-label>
-            <mat-select [value]="editForm.values['alarmNotificationsEnabled']"
-                        (selectionChange)="editForm.values['alarmNotificationsEnabled'] = $event.value">
-              <mat-option [value]="null">Don't change</mat-option>
-              <mat-option [value]="true">Enabled</mat-option>
-              <mat-option [value]="false">Disabled</mat-option>
-            </mat-select>
-          </mat-form-field>
-        </div>
-
         <div class="template-section-title">Offline</div>
         <div class="template-grid">
           <div class="template-toggle" *ngIf="!bulkEdit">

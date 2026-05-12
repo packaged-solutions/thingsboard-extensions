@@ -51,7 +51,6 @@ export interface DeviceThresholdRow {
   customerId: string | null;
   customerName: string;
   selected: boolean;
-  alarmNotificationsEnabled: boolean | null;
   attributes: { [key: string]: number | string | boolean | null };
   alarmEmailList: string[];
   alarmSmsList: string[];
