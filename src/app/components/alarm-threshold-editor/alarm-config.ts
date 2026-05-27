@@ -33,7 +33,7 @@ export const ALARM_CONFIG: AlarmConfigMap = {
       { key: 'lowTemperatureAlarmThreshold', label: 'Low Temperature', telemetryKey: 'temperature', unit: '°C', operation: 'LESS', severity: 'MAJOR', alarmName: 'Low Temperature Alarm' },
       { key: 'highHumidityAlarmThreshold', label: 'High Humidity', telemetryKey: 'humidity', unit: '%', operation: 'GREATER', severity: 'MAJOR', alarmName: 'High Humidity Alarm' },
       { key: 'lowHumidityAlarmThreshold', label: 'Low Humidity', telemetryKey: 'humidity', unit: '%', operation: 'LESS', severity: 'MAJOR', alarmName: 'Low Humidity Alarm' },
-      { key: 'lowBatteryThreshold', label: 'Low Battery', telemetryKey: 'battery', unit: '%', operation: 'LESS', severity: 'MAJOR', alarmName: 'Low Battery Alarm' }
+      { key: 'lowBatteryThreshold', label: 'Low Battery', telemetryKey: 'battery', unit: '%', operation: 'LESS_OR_EQUAL', severity: 'MAJOR', alarmName: 'Low Battery Alarm' }
     ]
   },
 
@@ -51,7 +51,7 @@ export const ALARM_CONFIG: AlarmConfigMap = {
       { key: 'lowTemperatureAlarmThreshold', label: 'Low Temperature', telemetryKey: 'temperature', unit: '°C', operation: 'LESS', severity: 'MAJOR', alarmName: 'Low Temperature Alarm' },
       { key: 'highHumidityAlarmThreshold', label: 'High Humidity', telemetryKey: 'humidity', unit: '%', operation: 'GREATER', severity: 'MAJOR', alarmName: 'High Humidity Alarm' },
       { key: 'lowHumidityAlarmThreshold', label: 'Low Humidity', telemetryKey: 'humidity', unit: '%', operation: 'LESS', severity: 'MAJOR', alarmName: 'Low Humidity Alarm' },
-      { key: 'lowBatteryThreshold', label: 'Low Battery', telemetryKey: 'battery', unit: '%', operation: 'LESS', severity: 'MAJOR', alarmName: 'Low Battery Alarm' }
+      { key: 'lowBatteryThreshold', label: 'Low Battery', telemetryKey: 'battery', unit: '%', operation: 'LESS_OR_EQUAL', severity: 'MAJOR', alarmName: 'Low Battery Alarm' }
     ],
     digitals: [
       { key: 'digital', label: 'Digital', statusTelemetryKey: 'status', enabledAttributeKey: 'digitalAlarmEnabled', conditionAttributeKey: 'digitalAlarmCondition', severity: 'MAJOR', alarmName: 'Digital Alarm', statusValueType: 'BOOLEAN' }
@@ -248,7 +248,7 @@ export const ALARM_CONFIG: AlarmConfigMap = {
     thresholds: [
       { key: 'highTemperatureAlarmThreshold', label: 'High Temperature', telemetryKey: 'temperature', unit: '°C', operation: 'GREATER', severity: 'MAJOR', alarmName: 'High Temperature Alarm' },
       { key: 'lowTemperatureAlarmThreshold', label: 'Low Temperature', telemetryKey: 'temperature', unit: '°C', operation: 'LESS', severity: 'MAJOR', alarmName: 'Low Temperature  Alarm' },
-      { key: 'lowBatteryThreshold', label: 'Low Battery', telemetryKey: 'battery', unit: '%', operation: 'LESS', severity: 'MAJOR', alarmName: 'Low Battery Alarm' }
+      { key: 'lowBatteryThreshold', label: 'Low Battery', telemetryKey: 'battery', unit: '%', operation: 'LESS_OR_EQUAL', severity: 'MAJOR', alarmName: 'Low Battery Alarm' }
     ]
   }
 
