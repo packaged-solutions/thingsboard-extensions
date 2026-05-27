@@ -181,8 +181,11 @@ export const ALARM_CONFIG: AlarmConfigMap = {
   // --- MON-Temperature (Temperature monitor) ---
   // NOTE: PRD only defines Low Battery — no temperature alarms are configured
   //   on this profile. If temperature alarms are expected here, add them to PRD.
+  // I have made these the same as TH from above so at least the widget is aware of them
   'MON-Temperature': {
     thresholds: [
+      { key: 'highTemperatureAlarmThreshold', label: 'High Temperature', telemetryKey: 'temperature', unit: '°C', operation: 'GREATER', severity: 'MAJOR', alarmName: 'High Temperature Alarm' },
+      { key: 'lowTemperatureAlarmThreshold', label: 'Low Temperature', telemetryKey: 'temperature', unit: '°C', operation: 'LESS', severity: 'MAJOR', alarmName: 'Low Temperature Alarm' },
       { key: 'lowBatteryThreshold', label: 'Low Battery', telemetryKey: 'battery', unit: '%', operation: 'LESS_OR_EQUAL', severity: 'MAJOR', alarmName: 'Low Battery Alarm' }
     ]
   },
