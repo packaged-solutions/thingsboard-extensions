@@ -819,9 +819,14 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       return state && state.condition != null;
     });
 
+    const delay = this.formDelay();
+    // Bulk delay semantics: a non-null delay in the form means "apply to all selected".
+    // Blank still means leave alone; we don't support bulk-clearing delays.
+    const applyDelay = delay != null;
+
     if (
       thresholdsToApply.length === 0 && !applyEmails && !applySms && !applyOfflineEnabled
-      && !applyOfflineTimeout && digitalsToApply.length === 0
+      && !applyOfflineTimeout && digitalsToApply.length === 0 && !applyDelay
     ) {
       this.closeEdit();
       return;
@@ -835,7 +840,6 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       takeUntil(this.destroy$),
       switchMap(byDevice => {
         const requests: Observable<any>[] = [];
-        const delay = this.formDelay();
         selected.forEach(device => {
           const byName = byDevice.get(device.deviceId) || new Map<string, any>();
 
@@ -866,9 +870,34 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
               requests.push(this.saveAttribute(device.deviceId, dig.conditionAttributeKey, state.condition as boolean | number));
             }
           });
+          // Form fields left blank in bulk mode mean "leave alone". For a
+          // delay-only change we still need to rewrite each device's existing
+          // alarmConfig_<key> with the new delay, so fall back to that device's
+          // current threshold/hysteresis attributes for any threshold it already
+          // has a CF for.
+          const perDeviceValues = { ...this.editForm.values };
+          if (applyDelay) {
+            group.config.thresholds.forEach(t => {
+              if (!device.cfAlarmKeys.has(t.key)) return;
+              if (perDeviceValues[t.key] == null) {
+                const existing = device.attributes[t.key];
+                perDeviceValues[t.key] = existing == null ? null : Number(existing);
+              }
+              const hKey = this.cfService.hysteresisKey(t);
+              if (perDeviceValues[hKey] == null) {
+                const hExisting = device.attributes[hKey];
+                perDeviceValues[hKey] = hExisting == null ? null : Number(hExisting);
+              }
+            });
+          }
           const alarmConfigBody = this.buildAlarmConfigBody(
-            device.deviceId, group, this.editForm.values, delay, this.editForm.digitals
+            device.deviceId, group, perDeviceValues, delay, this.editForm.digitals
           );
+          if (applyDelay) {
+            alarmConfigBody['alarmDelay'] = this.cfService.formatDelayLabel(delay);
+            alarmConfigBody['alarmDelayValue'] = delay.value;
+            alarmConfigBody['alarmDelayUnit'] = delay.unit;
+          }
           if (Object.keys(alarmConfigBody).length > 0) {
             requests.push(this.saveAttributes(device.deviceId, alarmConfigBody));
           }
@@ -887,7 +916,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
             d.attributes[hKey] = hVal == null || hVal === ('' as any) ? null : Number(hVal);
             d.cfAlarmKeys.add(t.key);
           });
-          if (thresholdsToApply.length > 0) {
+          if (thresholdsToApply.length > 0 || applyDelay) {
             d.attributes['alarmDelay'] = delayLabel;
             d.attributes['alarmDelayValue'] = appliedDelay?.value ?? null;
             d.attributes['alarmDelayUnit'] = appliedDelay?.unit ?? null;
