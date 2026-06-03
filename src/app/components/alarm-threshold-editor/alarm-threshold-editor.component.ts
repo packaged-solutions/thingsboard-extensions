@@ -87,6 +87,8 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     sms: string;
     delayValue: number | null;
     delayUnit: DelayUnit;
+    digitalDelayValue: number | null;
+    digitalDelayUnit: DelayUnit;
     digitals: { [digitalKey: string]: { condition: boolean | number | null } };
     deletes: Set<string>;
     reenables: Set<string>;
@@ -94,12 +96,18 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       values: { [key: string]: number | boolean | null };
       delayValue: number | null;
       delayUnit: DelayUnit;
+      digitalDelayValue: number | null;
+      digitalDelayUnit: DelayUnit;
       digitals: { [digitalKey: string]: { condition: boolean | number | null } };
     };
   } = {
-    values: {}, emails: '', sms: '', delayValue: null, delayUnit: 'MINUTES', digitals: {},
+    values: {}, emails: '', sms: '', delayValue: null, delayUnit: 'MINUTES',
+    digitalDelayValue: null, digitalDelayUnit: 'MINUTES', digitals: {},
     deletes: new Set<string>(), reenables: new Set<string>(),
-    original: { values: {}, delayValue: null, delayUnit: 'MINUTES', digitals: {} }
+    original: {
+      values: {}, delayValue: null, delayUnit: 'MINUTES',
+      digitalDelayValue: null, digitalDelayUnit: 'MINUTES', digitals: {}
+    }
   };
   readonly delayUnits: DelayUnit[] = ['SECONDS', 'MINUTES', 'HOURS'];
 
@@ -426,10 +434,15 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       sms: '',
       delayValue: null,
       delayUnit: 'MINUTES',
+      digitalDelayValue: null,
+      digitalDelayUnit: 'MINUTES',
       digitals,
       deletes: new Set<string>(),
       reenables: new Set<string>(),
-      original: { values: { ...values }, delayValue: null, delayUnit: 'MINUTES', digitals: {} }
+      original: {
+        values: { ...values }, delayValue: null, delayUnit: 'MINUTES',
+        digitalDelayValue: null, digitalDelayUnit: 'MINUTES', digitals: {}
+      }
     };
     this.editDialogOpen = true;
     this.ctx.detectChanges();
@@ -475,17 +488,23 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
 
     const existingDelayValue = device.attributes['alarmDelayValue'];
     const existingDelayUnit = device.attributes['alarmDelayUnit'];
+    const existingDigitalDelayValue = device.attributes['alarmDigitalDelayValue'];
+    const existingDigitalDelayUnit = device.attributes['alarmDigitalDelayUnit'];
 
     this.editingDevice = device;
     this.bulkEdit = false;
     const initialDelayValue = existingDelayValue == null ? null : Number(existingDelayValue);
     const initialDelayUnit = (existingDelayUnit as DelayUnit) || 'MINUTES';
+    const initialDigitalDelayValue = existingDigitalDelayValue == null ? null : Number(existingDigitalDelayValue);
+    const initialDigitalDelayUnit = (existingDigitalDelayUnit as DelayUnit) || 'MINUTES';
     this.editForm = {
       values,
       emails: device.alarmEmailList.join(', '),
       sms: device.alarmSmsList.join(', '),
       delayValue: initialDelayValue,
       delayUnit: initialDelayUnit,
+      digitalDelayValue: initialDigitalDelayValue,
+      digitalDelayUnit: initialDigitalDelayUnit,
       digitals,
       deletes: new Set<string>(),
       reenables: new Set<string>(),
@@ -493,6 +512,8 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
         values: { ...values },
         delayValue: initialDelayValue,
         delayUnit: initialDelayUnit,
+        digitalDelayValue: initialDigitalDelayValue,
+        digitalDelayUnit: initialDigitalDelayUnit,
         digitals: Object.keys(digitals).reduce((acc, k) => {
           acc[k] = { condition: digitals[k].condition };
           return acc;
@@ -654,6 +675,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
         const delay = this.editForm.delayValue != null && Number(this.editForm.delayValue) > 0
           ? { value: Number(this.editForm.delayValue), unit: this.editForm.delayUnit }
           : null;
+        const digitalDelay = this.formDigitalDelay();
         const byName = byDevice.get(device.deviceId) || new Map<string, any>();
 
         thresholdsToApply.forEach(t => {
@@ -683,7 +705,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
           if (state.condition != null) {
             requests.push(this.saveAttribute(device.deviceId, dig.conditionAttributeKey, state.condition as boolean | number));
           }
-          const payload = this.cfService.buildDigitalPayload(device.deviceId, dig);
+          const payload = this.cfService.buildDigitalPayload(device.deviceId, dig, digitalDelay);
           const match = byName.get(dig.alarmName);
           if (match?.id) {
             payload.id = match.id;
@@ -695,6 +717,9 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
         const delayChanged =
           original.delayValue !== this.editForm.delayValue ||
           original.delayUnit !== this.editForm.delayUnit;
+        const digitalDelayChanged =
+          original.digitalDelayValue !== this.editForm.digitalDelayValue ||
+          original.digitalDelayUnit !== this.editForm.digitalDelayUnit;
         const hasExistingCf = (alarmKey: string) => device.cfAlarmKeys.has(alarmKey);
         const numOrNull = (v: any): number | null =>
           v == null || v === '' ? null : Number(v);
@@ -717,14 +742,14 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
           if (isInactive(d.key)) return;
           const before = original.digitals[d.key] || { condition: null };
           const after = this.editForm.digitals[d.key] || { condition: null };
-          const stateChanged = before.condition !== after.condition;
           const hasState = after.condition != null;
+          const stateChanged = before.condition !== after.condition || (digitalDelayChanged && hasState);
           if (stateChanged || (hasState && !hasExistingCf(d.key))) {
             changedAlarmKeys.add(d.key);
           }
         });
         const alarmConfigBody = this.buildAlarmConfigBody(
-          device.deviceId, group, this.editForm.values, delay, this.editForm.digitals, changedAlarmKeys, deletes
+          device.deviceId, group, this.editForm.values, delay, digitalDelay, this.editForm.digitals, changedAlarmKeys, deletes
         );
         if (Object.keys(alarmConfigBody).length > 0) {
           requests.push(this.saveAttributes(device.deviceId, alarmConfigBody));
@@ -737,6 +762,8 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
           ? { value: Number(this.editForm.delayValue), unit: this.editForm.delayUnit }
           : null;
         const delayLabel = this.cfService.formatDelayLabel(appliedDelay);
+        const appliedDigitalDelay = this.formDigitalDelay();
+        const digitalDelayLabel = this.cfService.formatDelayLabel(appliedDigitalDelay);
         thresholdsToApply.forEach(t => {
           device.attributes[t.key] = Number(this.editForm.values[t.key]);
           const hKey = this.cfService.hysteresisKey(t);
@@ -747,6 +774,11 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
           device.attributes['alarmDelay'] = delayLabel;
           device.attributes['alarmDelayValue'] = appliedDelay?.value ?? null;
           device.attributes['alarmDelayUnit'] = appliedDelay?.unit ?? null;
+        }
+        if ((group.config.digitals || []).some(d => changedAlarmKeys.has(d.key))) {
+          device.attributes['alarmDigitalDelay'] = digitalDelayLabel;
+          device.attributes['alarmDigitalDelayValue'] = appliedDigitalDelay?.value ?? null;
+          device.attributes['alarmDigitalDelayUnit'] = appliedDigitalDelay?.unit ?? null;
         }
         if (applyEmails) {
           device.alarmEmailList = [...emails];
@@ -824,9 +856,12 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     // Blank still means leave alone; we don't support bulk-clearing delays.
     const applyDelay = delay != null;
 
+    const digitalDelay = this.formDigitalDelay();
+    const applyDigitalDelay = digitalDelay != null;
+
     if (
       thresholdsToApply.length === 0 && !applyEmails && !applySms && !applyOfflineEnabled
-      && !applyOfflineTimeout && digitalsToApply.length === 0 && !applyDelay
+      && !applyOfflineTimeout && digitalsToApply.length === 0 && !applyDelay && !applyDigitalDelay
     ) {
       this.closeEdit();
       return;
@@ -890,13 +925,36 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
               }
             });
           }
+          // Same "leave alone" fallback for digital alarms: a digital-delay-only
+          // change must rewrite each device's existing digital CFs, so backfill the
+          // condition from the device's current attribute where the form is blank.
+          const perDeviceDigitals = { ...this.editForm.digitals };
+          if (applyDigitalDelay) {
+            (group.config.digitals || []).forEach(d => {
+              if (!device.cfAlarmKeys.has(d.key)) return;
+              const cur = perDeviceDigitals[d.key];
+              if (cur && cur.condition != null) return;
+              const existing = device.attributes[d.conditionAttributeKey];
+              perDeviceDigitals[d.key] = {
+                condition: existing == null ? null
+                  : d.statusValueType === 'BOOLEAN'
+                    ? (existing === true || existing === 'true')
+                    : Number(existing)
+              };
+            });
+          }
           const alarmConfigBody = this.buildAlarmConfigBody(
-            device.deviceId, group, perDeviceValues, delay, this.editForm.digitals
+            device.deviceId, group, perDeviceValues, delay, digitalDelay, perDeviceDigitals
           );
           if (applyDelay) {
             alarmConfigBody['alarmDelay'] = this.cfService.formatDelayLabel(delay);
             alarmConfigBody['alarmDelayValue'] = delay.value;
             alarmConfigBody['alarmDelayUnit'] = delay.unit;
+          }
+          if (applyDigitalDelay) {
+            alarmConfigBody['alarmDigitalDelay'] = this.cfService.formatDelayLabel(digitalDelay);
+            alarmConfigBody['alarmDigitalDelayValue'] = digitalDelay.value;
+            alarmConfigBody['alarmDigitalDelayUnit'] = digitalDelay.unit;
           }
           if (Object.keys(alarmConfigBody).length > 0) {
             requests.push(this.saveAttributes(device.deviceId, alarmConfigBody));
@@ -908,6 +966,8 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       next: () => {
         const appliedDelay = this.formDelay();
         const delayLabel = this.cfService.formatDelayLabel(appliedDelay);
+        const appliedDigitalDelay = this.formDigitalDelay();
+        const digitalDelayLabel = this.cfService.formatDelayLabel(appliedDigitalDelay);
         selected.forEach(d => {
           thresholdsToApply.forEach(t => {
             d.attributes[t.key] = Number(this.editForm.values[t.key]);
@@ -920,6 +980,13 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
             d.attributes['alarmDelay'] = delayLabel;
             d.attributes['alarmDelayValue'] = appliedDelay?.value ?? null;
             d.attributes['alarmDelayUnit'] = appliedDelay?.unit ?? null;
+          }
+          const digitalDelayApplied = digitalsToApply.length > 0
+            || (applyDigitalDelay && (group.config.digitals || []).some(dig => d.cfAlarmKeys.has(dig.key)));
+          if (digitalDelayApplied) {
+            d.attributes['alarmDigitalDelay'] = digitalDelayLabel;
+            d.attributes['alarmDigitalDelayValue'] = appliedDigitalDelay?.value ?? null;
+            d.attributes['alarmDigitalDelayUnit'] = appliedDigitalDelay?.unit ?? null;
           }
           if (applyEmails) {
             d.alarmEmailList = [...emails];
@@ -956,6 +1023,12 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     const v = this.editForm.delayValue;
     if (v == null || Number(v) <= 0) return null;
     return { value: Number(v), unit: this.editForm.delayUnit };
+  }
+
+  private formDigitalDelay(): AlarmDelay | null {
+    const v = this.editForm.digitalDelayValue;
+    if (v == null || Number(v) <= 0) return null;
+    return { value: Number(v), unit: this.editForm.digitalDelayUnit };
   }
 
   isDigitalConfigured(device: DeviceThresholdRow, dig: DigitalConfig): boolean {
@@ -1102,6 +1175,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     group: ProfileGroup,
     values: { [key: string]: number | boolean | null },
     delay: AlarmDelay | null,
+    digitalDelay: AlarmDelay | null,
     digitalStates: { [k: string]: { condition: boolean | number | null } },
     changedAlarmKeys?: Set<string>,
     deletes?: Set<string>
@@ -1139,7 +1213,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       const state = digitalStates?.[d.key];
       if (state && state.condition != null) {
         if (changedAlarmKeys && !changedAlarmKeys.has(d.key)) return;
-        body[`alarmConfig_${d.key}`] = this.cfService.buildDigitalPayload(deviceId, d);
+        body[`alarmConfig_${d.key}`] = this.cfService.buildDigitalPayload(deviceId, d, digitalDelay);
         // Sentinel: same role as the numeric sentinel for thresholds. Suppresses any
         // profile-level digital alarm rule that reads this attribute. Our own CF no
         // longer references it.
@@ -1278,6 +1352,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       'offlineAlarmEnabled',
       'inactivityTimeout',
       'alarmDelay',
+      'alarmDigitalDelay',
       'alarmEmailList',
       'alarmSmsList'
     ]);
@@ -1483,6 +1558,11 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     attributes['alarmDelay'] = this.cfService.formatDelayLabel(delay);
     attributes['alarmDelayValue'] = delay?.value ?? null;
     attributes['alarmDelayUnit'] = delay?.unit ?? null;
+
+    const digitalDelay = this.cfService.extractDigitalDelay(deviceCfs, config.digitals || []);
+    attributes['alarmDigitalDelay'] = this.cfService.formatDelayLabel(digitalDelay);
+    attributes['alarmDigitalDelayValue'] = digitalDelay?.value ?? null;
+    attributes['alarmDigitalDelayUnit'] = digitalDelay?.unit ?? null;
 
     const emailAttr = allAttrs.find(a => a.key === 'alarmEmailList');
     const emailRaw = emailAttr?.value || '';

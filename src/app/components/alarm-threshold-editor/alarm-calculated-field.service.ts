@@ -98,9 +98,11 @@ export class AlarmCalculatedFieldService {
       }]
     };
     const details = this.thresholdAlarmDetails(threshold);
-    const wrapCondition = (filter: any, includeDetails: boolean) => {
+    // The delay only applies to raising the alarm; the clear rule fires
+    // immediately so an in-range reading clears the alarm without waiting.
+    const wrapCondition = (filter: any, includeDetails: boolean, applyDelay: boolean) => {
       const expression = { type: 'SIMPLE', filters: [filter], operation: 'AND' };
-      const condition: any = delay
+      const condition: any = delay && applyDelay
         ? {
             type: 'DURATION',
             expression,
@@ -129,8 +131,8 @@ export class AlarmCalculatedFieldService {
       configuration: {
         type: 'ALARM',
         arguments: { [argName]: telemetryArgDef, [cfArgName]: cfArgDef, [cfClearArgName]: cfClearArgDef },
-        createRules: { [threshold.severity]: wrapCondition(createFilter, true) },
-        clearRule: wrapCondition(clearFilter, false),
+        createRules: { [threshold.severity]: wrapCondition(createFilter, true, true) },
+        clearRule: wrapCondition(clearFilter, false, false),
         propagate: true,
         propagateToOwner: true,
         propagateToOwnerHierarchy: true,
@@ -141,7 +143,7 @@ export class AlarmCalculatedFieldService {
     };
   }
 
-  buildDigitalPayload(deviceId: string, digital: DigitalConfig): any {
+  buildDigitalPayload(deviceId: string, digital: DigitalConfig, delay: AlarmDelay | null): any {
     const statusArg = digital.statusTelemetryKey;
     const conditionArg = digital.conditionAttributeKey;
     const predicateType = digital.statusValueType === 'BOOLEAN' ? 'BOOLEAN' : 'NUMERIC';
@@ -156,6 +158,30 @@ export class AlarmCalculatedFieldService {
         value: { staticValue: null, dynamicValueArgument: conditionArg }
       }]
     });
+    // Mirror the threshold delay semantics: when a delay is set, the status must
+    // hold the matching value for the duration before the alarm fires. The clear
+    // rule fires immediately so a status change clears the alarm without waiting.
+    const wrapCondition = (op: 'EQUAL' | 'NOT_EQUAL', includeDetails: boolean, applyDelay: boolean) => {
+      const expression = { type: 'SIMPLE', filters: [statusFilter(op)], operation: 'AND' };
+      const condition: any = delay && applyDelay
+        ? {
+            type: 'DURATION',
+            expression,
+            schedule: null,
+            unit: delay.unit,
+            value: { staticValue: delay.value, dynamicValueArgument: null }
+          }
+        : {
+            type: 'SIMPLE',
+            expression,
+            schedule: null
+          };
+      return {
+        condition,
+        alarmDetails: includeDetails ? details : null,
+        dashboardId: null
+      };
+    };
 
     return {
       type: 'ALARM',
@@ -175,34 +201,8 @@ export class AlarmCalculatedFieldService {
             defaultValue: ''
           }
         },
-        createRules: {
-          [digital.severity]: {
-            condition: {
-              type: 'SIMPLE',
-              expression: {
-                type: 'SIMPLE',
-                filters: [statusFilter('EQUAL')],
-                operation: 'AND'
-              },
-              schedule: null
-            },
-            alarmDetails: details,
-            dashboardId: null
-          }
-        },
-        clearRule: {
-          condition: {
-            type: 'SIMPLE',
-            expression: {
-              type: 'SIMPLE',
-              filters: [statusFilter('NOT_EQUAL')],
-              operation: 'AND'
-            },
-            schedule: null
-          },
-          alarmDetails: null,
-          dashboardId: null
-        },
+        createRules: { [digital.severity]: wrapCondition('EQUAL', true, true) },
+        clearRule: wrapCondition('NOT_EQUAL', false, false),
         propagate: true,
         propagateToOwner: true,
         propagateToOwnerHierarchy: true,
@@ -300,6 +300,18 @@ export class AlarmCalculatedFieldService {
     return null;
   }
 
+  extractDigitalDelay(deviceCfs: Map<string, any>, digitals: DigitalConfig[]): AlarmDelay | null {
+    for (const d of digitals) {
+      const cf = deviceCfs.get(d.alarmName);
+      const cond = cf?.configuration?.createRules?.[d.severity]?.condition;
+      if (cond?.type === 'DURATION' && cond?.value?.staticValue != null) {
+        const unit = String(cond.unit || 'MINUTES').toUpperCase() as DelayUnit;
+        return { value: Number(cond.value.staticValue), unit };
+      }
+    }
+    return null;
+  }
+
   formatDelayLabel(delay: AlarmDelay | null): string | null {
     if (!delay) return null;
     return `${delay.value} ${delay.unit.toLowerCase()}`;
@@ -307,7 +319,7 @@ export class AlarmCalculatedFieldService {
 
   private thresholdAlarmDetails(t: ThresholdConfig): string {
     if (t.details) return t.details;
-    return `${t.label} alarm - $\{${t.telemetryKey}}${t.unit ?? ''}`;
+    return `${t.label} alarm - ($\{${t.telemetryKey}}${t.unit ?? ''})`;
   }
 
   private digitalAlarmDetails(d: DigitalConfig): string {

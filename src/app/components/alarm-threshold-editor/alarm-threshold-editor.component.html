@@ -121,6 +121,11 @@
                     {{ dig.label }}
                     <ng-container *ngTemplateOutlet="sortArrow; context: { $implicit: dig.conditionAttributeKey }"></ng-container>
                   </th>
+                  <th *ngIf="group.config.digitals?.length" class="sortable" (click)="sortByColumn('alarmDigitalDelay')"
+                      matTooltip="Delay applied to the status (digital) alarms">
+                    Status Delay
+                    <ng-container *ngTemplateOutlet="sortArrow; context: { $implicit: 'alarmDigitalDelay' }"></ng-container>
+                  </th>
                   <th class="sortable" (click)="sortByColumn('alarmDelay')">
                     Alarm Delay
                     <ng-container *ngTemplateOutlet="sortArrow; context: { $implicit: 'alarmDelay' }"></ng-container>
@@ -161,6 +166,11 @@
                     <td *ngFor="let dig of group.config.digitals || []" class="threshold-cell">
                       <span [class.threshold-empty]="!isDigitalConfigured(device, dig)">
                         {{ digitalSummary(device, dig) }}
+                      </span>
+                    </td>
+                    <td *ngIf="group.config.digitals?.length" class="threshold-cell">
+                      <span [class.threshold-empty]="device.attributes['alarmDigitalDelay'] == null">
+                        {{ device.attributes['alarmDigitalDelay'] == null ? '—' : device.attributes['alarmDigitalDelay'] }}
                       </span>
                     </td>
                     <td class="threshold-cell">
@@ -270,7 +280,7 @@
           </div>
         </div>
 
-        <div class="template-section-title" matTooltip="Condition must persist for this duration before the alarm fires (and clears)">Alarm Delay</div>
+        <div class="template-section-title" matTooltip="Condition must persist for this duration before the alarm fires. The alarm clears immediately when the condition is no longer met.">Alarm Delay</div>
         <div class="template-grid">
           <mat-form-field class="dense-field">
             <mat-label>Delay</mat-label>
@@ -330,6 +340,21 @@
                 </small>
               </ng-container>
             </div>
+          </div>
+          <div class="template-section-title" matTooltip="Status must persist for this duration before the digital alarm fires. The alarm clears immediately when the status changes.">Status Alarm Delay</div>
+          <div class="template-grid">
+            <mat-form-field class="dense-field">
+              <mat-label>Delay</mat-label>
+              <input matInput type="number" (keydown)="restrictToNumber($event)" (paste)="restrictPasteToNumber($event)" min="0" step="1"
+                     [(ngModel)]="editForm.digitalDelayValue"
+                     placeholder="Leave blank for immediate">
+            </mat-form-field>
+            <mat-form-field class="dense-field">
+              <mat-label>Unit</mat-label>
+              <mat-select [(value)]="editForm.digitalDelayUnit">
+                <mat-option *ngFor="let u of delayUnits" [value]="u">{{ u }}</mat-option>
+              </mat-select>
+            </mat-form-field>
           </div>
         </ng-container>
 

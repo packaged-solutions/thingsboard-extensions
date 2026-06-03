@@ -10,9 +10,10 @@ import { AlarmConfigMap } from './alarm-threshold-editor.models';
  * the create rule's `alarmDetails` (visible as "Additional info" on the alarm).
  *
  * - If `details` is omitted, the widget auto-generates a generic line that
- *   appends the configured `unit` (when set):
- *     `<Label> alarm - ${<telemetryKey>}<unit>`
- *   e.g. `High Temperature alarm - ${temperature}°C`.
+ *   appends the configured `unit` (when set), wrapping the value in
+ *   parentheses so a negative reading doesn't read as a double dash:
+ *     `<Label> alarm - (${<telemetryKey>}<unit>)`
+ *   e.g. `High Temperature alarm - (${temperature}°C)` → `... - (-12.3°C)`.
  *
  * - To match PRD wording (lowercase phrasing, units, etc.), set `details`
  *   explicitly. ThingsBoard supports `${telemetryKey}` substitutions, so:
