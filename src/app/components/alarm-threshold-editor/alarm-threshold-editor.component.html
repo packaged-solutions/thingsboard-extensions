@@ -232,6 +232,7 @@
           <span>Only fields you fill in will be applied to the {{ selectedCount() }} selected device{{ selectedCount() === 1 ? '' : 's' }}. Leave a field blank to keep its current value.</span>
         </div>
 
+        <ng-container *ngIf="group.config.thresholds.length">
         <div class="template-section-title">Thresholds</div>
         <div class="template-grid">
           <div *ngFor="let t of group.config.thresholds"
@@ -295,6 +296,7 @@
             </mat-select>
           </mat-form-field>
         </div>
+        </ng-container>
 
         <ng-container *ngIf="group.config.digitals?.length">
           <div class="template-section-title">Digital Alarms</div>

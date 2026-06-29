@@ -199,7 +199,7 @@ export const ALARM_CONFIG: AlarmConfigMap = {
     ]
   },
 
-  // --- WEI-COM (Weightron Compactor) ---
+  // (Weightron Compactor) ---
   'WEI-COM': {
     thresholds: [
       { key: 'highPercentageFullAlarmThreshold', label: 'High Percentage Full', telemetryKey: 'percentageFull', unit: '%', operation: 'GREATER', severity: 'MAJOR', alarmName: 'High Percentage Full Alarm' }
@@ -242,6 +242,10 @@ export const ALARM_CONFIG: AlarmConfigMap = {
       { key: 'highCurrentAlarmThreshold2', label: 'High Current 2', telemetryKey: 'current2', unit: 'A', operation: 'GREATER', severity: 'MAJOR', alarmName: 'High Current 2 Alarm' },
       { key: 'highCurrentAlarmThreshold3', label: 'High Current 3', telemetryKey: 'current3', unit: 'A', operation: 'GREATER', severity: 'MAJOR', alarmName: 'High Current 3 Alarm' }
     ]
+  },
+
+  'LOR-Gateway': {
+    thresholds:[]
   },
 
   // --- Default profile (dual temperature with delay) ---
