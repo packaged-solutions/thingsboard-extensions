@@ -389,6 +389,14 @@
   .hysteresis-input {
     min-width: 0;
 
+    // Long resting labels (e.g. "High Percentage Full") run under the native
+    // number spinners: shrink them and ellipsize before the spinner area.
+    // ::ng-deep because .mdc-floating-label is inside Material's template.
+    ::ng-deep .mdc-floating-label:not(.mdc-floating-label--float-above) {
+      font-size: 12px;
+      max-width: calc(100% - 18px);
+    }
+
     .mat-mdc-form-field-text-suffix {
       align-self: flex-end;
       padding-bottom: 8px;
