@@ -248,6 +248,15 @@ export const ALARM_CONFIG: AlarmConfigMap = {
     thresholds:[]
   },
 
+  // -- Radar sensor, the telemetryKey is a calculated field ---
+  'MIS-EM410-RDL': {
+    thresholds: [
+      { key: 'highPercentageFullAlarmThreshold', label: 'High Percentage Full', telemetryKey: 'percentFull', unit: '%', operation: 'GREATER', severity: 'MAJOR', alarmName: 'High Percentage Full Alarm' },
+      { key: 'lowPercentageFullAlarmThreshold', label: 'Low Percentage Full', telemetryKey: 'percentFull', unit: '%', operation: 'LESS', severity: 'MAJOR', alarmName: 'Low Percentage Full Alarm' },
+      { key: 'lowBatteryThreshold', label: 'Low Battery', telemetryKey: 'battery', unit: '%', operation: 'LESS_OR_EQUAL', severity: 'MAJOR', alarmName: 'Low Battery Alarm' }
+    ]
+  },
+
   // --- Default profile (dual temperature with delay) ---
   'default': {
     thresholds: [
