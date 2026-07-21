@@ -12,12 +12,19 @@
   <div class="toolbar">
     <ng-container *ngIf="!searchOpen">
       <mat-form-field *ngIf="customers.length > 1" class="profile-field dense-field">
-        <mat-label>Customer</mat-label>
+        <mat-label>Select Customer</mat-label>
         <input matInput type="text"
+               placeholder="Select customer..."
+               #customerInput
+               #customerTrigger="matAutocompleteTrigger"
                [matAutocomplete]="customerAuto"
                [(ngModel)]="customerSearch"
                (ngModelChange)="filterCustomers()"
                (focus)="onCustomerInputFocus()">
+        <mat-icon matSuffix
+                  class="select-arrow"
+                  [class.select-arrow-open]="customerTrigger.panelOpen"
+                  (click)="openAutoPanel(customerInput, customerTrigger, $event)">arrow_drop_down</mat-icon>
         <mat-autocomplete #customerAuto="matAutocomplete"
                           [displayWith]="displayCustomer"
                           (optionSelected)="onCustomerAutoSelected($event)">
@@ -28,12 +35,19 @@
       </mat-form-field>
 
       <mat-form-field *ngIf="profileGroups.length > 0" class="profile-field dense-field">
-        <mat-label>Device Type</mat-label>
+        <mat-label>Select Device Type</mat-label>
         <input matInput type="text"
+               placeholder="Select device type..."
+               #profileInput
+               #profileTrigger="matAutocompleteTrigger"
                [matAutocomplete]="profileAuto"
                [(ngModel)]="profileSearch"
                (ngModelChange)="filterProfiles()"
                (focus)="onProfileInputFocus()">
+        <mat-icon matSuffix
+                  class="select-arrow"
+                  [class.select-arrow-open]="profileTrigger.panelOpen"
+                  (click)="openAutoPanel(profileInput, profileTrigger, $event)">arrow_drop_down</mat-icon>
         <mat-autocomplete #profileAuto="matAutocomplete"
                           [displayWith]="displayProfile"
                           (optionSelected)="onProfileAutoSelected($event)">

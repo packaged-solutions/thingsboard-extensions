@@ -1,4 +1,5 @@
 import { Component, ElementRef, Input, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { MatAutocompleteTrigger } from '@angular/material/autocomplete';
 import { WidgetContext } from '@home/models/widget-component.models';
 import {
   AttributeData,
@@ -232,6 +233,16 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
 
   onCustomerInputFocus() {
     this.filteredCustomers = this.customers;
+  }
+
+  openAutoPanel(input: HTMLInputElement, trigger: MatAutocompleteTrigger, event: Event) {
+    event.stopPropagation();
+    if (trigger.panelOpen) {
+      trigger.closePanel();
+    } else {
+      input.focus();
+      trigger.openPanel();
+    }
   }
 
   displayCustomer = (c: CustomerOption | string): string => {

@@ -33,6 +33,16 @@
 
   .profile-field {
     min-width: 220px;
+
+    .select-arrow {
+      cursor: pointer;
+      color: rgba(0, 0, 0, 0.54);
+      transition: transform 0.2s ease;
+
+      &.select-arrow-open {
+        transform: rotate(180deg);
+      }
+    }
   }
 
   .body-row {
