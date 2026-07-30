@@ -270,23 +270,6 @@ export class AlarmCalculatedFieldService {
     return this.cfKey(threshold) + 'Clear';
   }
 
-  // Value written to the *original* threshold attribute on save to make any
-  // device-profile alarm rule that reads it never fire. Pairs with cfKey(),
-  // which holds the user's real threshold for the CF.
-  sentinelForOperation(op: ThresholdOperation): number {
-    switch (op) {
-      case 'GREATER':
-      case 'GREATER_OR_EQUAL':
-        return 999999;
-      case 'LESS':
-      case 'LESS_OR_EQUAL':
-        return -999999;
-      case 'EQUAL':
-      case 'NOT_EQUAL':
-        return 999999;
-    }
-  }
-
   extractDelay(deviceCfs: Map<string, any>, thresholds: ThresholdConfig[]): AlarmDelay | null {
     for (const t of thresholds) {
       const cf = deviceCfs.get(t.alarmName);

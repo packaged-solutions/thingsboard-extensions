@@ -55,7 +55,7 @@ export const ALARM_CONFIG: AlarmConfigMap = {
       { key: 'lowBatteryThreshold', label: 'Low Battery', telemetryKey: 'battery', unit: '%', operation: 'LESS_OR_EQUAL', severity: 'MAJOR', alarmName: 'Low Battery Alarm' }
     ],
     digitals: [
-      { key: 'digital', label: 'Digital', statusTelemetryKey: 'status', enabledAttributeKey: 'digitalAlarmEnabled', conditionAttributeKey: 'digitalAlarmCondition', severity: 'MAJOR', alarmName: 'Digital Alarm', statusValueType: 'BOOLEAN' }
+      { key: 'digital', label: 'Digital', statusTelemetryKey: 'status',conditionAttributeKey: 'digitalAlarmCondition', severity: 'MAJOR', alarmName: 'Digital Alarm', statusValueType: 'BOOLEAN' }
     ]
   },
 
@@ -69,7 +69,7 @@ export const ALARM_CONFIG: AlarmConfigMap = {
       { key: 'lowBatteryThreshold', label: 'Low Battery', telemetryKey: 'battery', unit: '%', operation: 'LESS_OR_EQUAL', severity: 'MAJOR', alarmName: 'Low Battery Alarm' }
     ],
     digitals: [
-      { key: 'digital', label: 'Digital', statusTelemetryKey: 'status', enabledAttributeKey: 'digitalAlarmEnabled', conditionAttributeKey: 'digitalAlarmCondition', severity: 'MAJOR', alarmName: 'Digital Alarm', statusValueType: 'BOOLEAN' }
+      { key: 'digital', label: 'Digital', statusTelemetryKey: 'status',conditionAttributeKey: 'digitalAlarmCondition', severity: 'MAJOR', alarmName: 'Digital Alarm', statusValueType: 'BOOLEAN' }
     ]
   },
 
@@ -83,7 +83,7 @@ export const ALARM_CONFIG: AlarmConfigMap = {
       { key: 'lowBatteryThreshold', label: 'Low Battery', telemetryKey: 'battery', unit: '%', operation: 'LESS_OR_EQUAL', severity: 'MAJOR', alarmName: 'Low Battery Alarm' }
     ],
     digitals: [
-      { key: 'digital', label: 'Digital', statusTelemetryKey: 'status', enabledAttributeKey: 'digitalAlarmEnabled', conditionAttributeKey: 'digitalAlarmCondition', severity: 'MAJOR', alarmName: 'Digital Alarm', statusValueType: 'BOOLEAN' }
+      { key: 'digital', label: 'Digital', statusTelemetryKey: 'status',conditionAttributeKey: 'digitalAlarmCondition', severity: 'MAJOR', alarmName: 'Digital Alarm', statusValueType: 'BOOLEAN' }
     ]
   },
 
@@ -133,8 +133,8 @@ export const ALARM_CONFIG: AlarmConfigMap = {
       { key: 'lowBatteryThreshold', label: 'Low Battery', telemetryKey: 'battery', unit: '%', operation: 'LESS_OR_EQUAL', severity: 'MAJOR', alarmName: 'Low Battery Alarm' }
     ],
     digitals: [
-      { key: 'digital1', label: 'Digital 1', statusTelemetryKey: 'status1', enabledAttributeKey: 'digitalAlarmEnabled1', conditionAttributeKey: 'digitalAlarmCondition1', severity: 'MAJOR', alarmName: 'Digital 1 Alarm', statusValueType: 'BOOLEAN' },
-      { key: 'digital2', label: 'Digital 2', statusTelemetryKey: 'status2', enabledAttributeKey: 'digitalAlarmEnabled2', conditionAttributeKey: 'digitalAlarmCondition2', severity: 'MAJOR', alarmName: 'Digital 2 Alarm', statusValueType: 'BOOLEAN' }
+      { key: 'digital1', label: 'Digital 1', statusTelemetryKey: 'status1',conditionAttributeKey: 'digitalAlarmCondition1', severity: 'MAJOR', alarmName: 'Digital 1 Alarm', statusValueType: 'BOOLEAN' },
+      { key: 'digital2', label: 'Digital 2', statusTelemetryKey: 'status2',conditionAttributeKey: 'digitalAlarmCondition2', severity: 'MAJOR', alarmName: 'Digital 2 Alarm', statusValueType: 'BOOLEAN' }
     ]
   },
 
@@ -175,7 +175,7 @@ export const ALARM_CONFIG: AlarmConfigMap = {
       { key: 'lowBatteryThreshold', label: 'Low Battery', telemetryKey: 'battery', unit: '%', operation: 'LESS_OR_EQUAL', severity: 'MAJOR', alarmName: 'Low Battery Alarm' }
     ],
     digitals: [
-      { key: 'digital', label: 'Digital', statusTelemetryKey: 'status', enabledAttributeKey: 'digitalAlarmEnabled', conditionAttributeKey: 'digitalAlarmCondition', severity: 'MAJOR', alarmName: 'Digital Alarm', statusValueType: 'BOOLEAN' }
+      { key: 'digital', label: 'Digital', statusTelemetryKey: 'status',conditionAttributeKey: 'digitalAlarmCondition', severity: 'MAJOR', alarmName: 'Digital Alarm', statusValueType: 'BOOLEAN' }
     ]
   },
 

@@ -1247,7 +1247,6 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
         : num;
       body[this.cfService.cfKey(t)] = num;
       body[this.cfService.cfClearKey(t)] = clearVal;
-      body[t.key] = this.cfService.sentinelForOperation(t.operation);
       body[`alarmConfig_${t.key}`] = this.cfService.buildThresholdPayload(deviceId, t, num, delay, hysteresis);
     });
     (group.config.digitals || []).forEach(d => {
@@ -1259,10 +1258,6 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       if (state && state.condition != null) {
         if (changedAlarmKeys && !changedAlarmKeys.has(d.key)) return;
         body[`alarmConfig_${d.key}`] = this.cfService.buildDigitalPayload(deviceId, d, digitalDelay);
-        // Sentinel: same role as the numeric sentinel for thresholds. Suppresses any
-        // profile-level digital alarm rule that reads this attribute. Our own CF no
-        // longer references it.
-        body[d.enabledAttributeKey] = false;
       }
     });
     return body;

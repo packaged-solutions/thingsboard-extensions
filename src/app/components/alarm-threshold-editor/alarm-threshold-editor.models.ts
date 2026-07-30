@@ -26,7 +26,6 @@ export interface DigitalConfig {
   key: string;
   label: string;
   statusTelemetryKey: string;
-  enabledAttributeKey: string;
   conditionAttributeKey: string;
   severity: AlarmSeverity;
   alarmName: string;
