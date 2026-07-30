@@ -676,6 +676,14 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
 
     this.saving = true;
 
+    const original = this.editForm.original;
+    const delayChanged =
+      original.delayValue !== this.editForm.delayValue ||
+      original.delayUnit !== this.editForm.delayUnit;
+    const digitalDelayChanged =
+      original.digitalDelayValue !== this.editForm.digitalDelayValue ||
+      original.digitalDelayUnit !== this.editForm.digitalDelayUnit;
+
     const existingByDevice$ = of(new Map<string, Map<string, any>>());
     const changedAlarmKeys = new Set<string>();
 
@@ -724,13 +732,6 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
           }
           // requests.push(this.ctx.http.post('/api/calculatedField', payload));
         });
-        const original = this.editForm.original;
-        const delayChanged =
-          original.delayValue !== this.editForm.delayValue ||
-          original.delayUnit !== this.editForm.delayUnit;
-        const digitalDelayChanged =
-          original.digitalDelayValue !== this.editForm.digitalDelayValue ||
-          original.digitalDelayUnit !== this.editForm.digitalDelayUnit;
         const hasExistingCf = (alarmKey: string) => device.cfAlarmKeys.has(alarmKey);
         const numOrNull = (v: any): number | null =>
           v == null || v === '' ? null : Number(v);
@@ -762,6 +763,30 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
         const alarmConfigBody = this.buildAlarmConfigBody(
           device.deviceId, group, this.editForm.values, delay, digitalDelay, this.editForm.digitals, changedAlarmKeys, deletes
         );
+        // Persist delays as standalone attributes: the CF payloads that carry them are
+        // swept by the rule chain when an alarm is disabled, so these attrs are what
+        // lets the modal restore the delay after every delayed alarm has been disabled.
+        // The human-readable label attrs (alarmDelay/alarmDigitalDelay) are no longer
+        // persisted — the widget derives the label from value+unit — so sweep any
+        // stale copy left by older widget versions whenever we touch the delay.
+        const delayAttrsToDelete: string[] = [];
+        if (delay != null) {
+          alarmConfigBody['alarmDelayValue'] = delay.value;
+          alarmConfigBody['alarmDelayUnit'] = delay.unit;
+          delayAttrsToDelete.push('alarmDelay');
+        } else if (delayChanged) {
+          delayAttrsToDelete.push('alarmDelay', 'alarmDelayValue', 'alarmDelayUnit');
+        }
+        if (digitalDelay != null) {
+          alarmConfigBody['alarmDigitalDelayValue'] = digitalDelay.value;
+          alarmConfigBody['alarmDigitalDelayUnit'] = digitalDelay.unit;
+          delayAttrsToDelete.push('alarmDigitalDelay');
+        } else if (digitalDelayChanged) {
+          delayAttrsToDelete.push('alarmDigitalDelay', 'alarmDigitalDelayValue', 'alarmDigitalDelayUnit');
+        }
+        if (delayAttrsToDelete.length > 0) {
+          requests.push(this.deleteAttributes(device.deviceId, delayAttrsToDelete));
+        }
         if (Object.keys(alarmConfigBody).length > 0) {
           requests.push(this.saveAttributes(device.deviceId, alarmConfigBody));
         }
@@ -781,12 +806,12 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
           const hVal = this.editForm.values[hKey];
           device.attributes[hKey] = hVal == null || hVal === ('' as any) ? null : Number(hVal);
         });
-        if (thresholdsToApply.length > 0) {
+        if (thresholdsToApply.length > 0 || delayChanged) {
           device.attributes['alarmDelay'] = delayLabel;
           device.attributes['alarmDelayValue'] = appliedDelay?.value ?? null;
           device.attributes['alarmDelayUnit'] = appliedDelay?.unit ?? null;
         }
-        if ((group.config.digitals || []).some(d => changedAlarmKeys.has(d.key))) {
+        if (digitalDelayChanged || (group.config.digitals || []).some(d => changedAlarmKeys.has(d.key))) {
           device.attributes['alarmDigitalDelay'] = digitalDelayLabel;
           device.attributes['alarmDigitalDelayValue'] = appliedDigitalDelay?.value ?? null;
           device.attributes['alarmDigitalDelayUnit'] = appliedDigitalDelay?.unit ?? null;
@@ -957,15 +982,20 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
           const alarmConfigBody = this.buildAlarmConfigBody(
             device.deviceId, group, perDeviceValues, delay, digitalDelay, perDeviceDigitals
           );
+          // Label attrs are no longer persisted — sweep stale copies from older versions.
+          const staleLabelAttrs: string[] = [];
           if (applyDelay) {
-            alarmConfigBody['alarmDelay'] = this.cfService.formatDelayLabel(delay);
             alarmConfigBody['alarmDelayValue'] = delay.value;
             alarmConfigBody['alarmDelayUnit'] = delay.unit;
+            staleLabelAttrs.push('alarmDelay');
           }
           if (applyDigitalDelay) {
-            alarmConfigBody['alarmDigitalDelay'] = this.cfService.formatDelayLabel(digitalDelay);
             alarmConfigBody['alarmDigitalDelayValue'] = digitalDelay.value;
             alarmConfigBody['alarmDigitalDelayUnit'] = digitalDelay.unit;
+            staleLabelAttrs.push('alarmDigitalDelay');
+          }
+          if (staleLabelAttrs.length > 0) {
+            requests.push(this.deleteAttributes(device.deviceId, staleLabelAttrs));
           }
           if (Object.keys(alarmConfigBody).length > 0) {
             requests.push(this.saveAttributes(device.deviceId, alarmConfigBody));
@@ -992,9 +1022,7 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
             d.attributes['alarmDelayValue'] = appliedDelay?.value ?? null;
             d.attributes['alarmDelayUnit'] = appliedDelay?.unit ?? null;
           }
-          const digitalDelayApplied = digitalsToApply.length > 0
-            || (applyDigitalDelay && (group.config.digitals || []).some(dig => d.cfAlarmKeys.has(dig.key)));
-          if (digitalDelayApplied) {
+          if (digitalsToApply.length > 0 || applyDigitalDelay) {
             d.attributes['alarmDigitalDelay'] = digitalDelayLabel;
             d.attributes['alarmDigitalDelayValue'] = appliedDigitalDelay?.value ?? null;
             d.attributes['alarmDigitalDelayUnit'] = appliedDigitalDelay?.unit ?? null;
@@ -1181,6 +1209,12 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     );
   }
 
+  private deleteAttributes(deviceId: string, keys: string[]): Observable<any> {
+    return this.ctx.http.delete(
+      `/api/plugins/telemetry/DEVICE/${deviceId}/SERVER_SCOPE?keys=${keys.join(',')}`
+    );
+  }
+
   private buildAlarmConfigBody(
     deviceId: string,
     group: ProfileGroup,
@@ -1362,8 +1396,10 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
     const keys = new Set<string>([
       'offlineAlarmEnabled',
       'inactivityTimeout',
-      'alarmDelay',
-      'alarmDigitalDelay',
+      'alarmDelayValue',
+      'alarmDelayUnit',
+      'alarmDigitalDelayValue',
+      'alarmDigitalDelayUnit',
       'alarmEmailList',
       'alarmSmsList'
     ]);
@@ -1565,12 +1601,26 @@ export class AlarmThresholdEditorComponent implements OnInit, OnDestroy {
       attributes[this.cfService.hysteresisKey(t)] = hysteresis;
     });
 
-    const delay = this.cfService.extractDelay(deviceCfs, config.thresholds);
+    // Live CF payloads are the source of truth for delays, but they vanish when the
+    // rule chain sweeps alarmConfig_ on disable — fall back to the persisted
+    // alarm*Delay* attributes so a disabled alarm's delay survives into the modal.
+    const storedDelay = (valueKey: string, unitKey: string): AlarmDelay | null => {
+      const raw = allAttrs.find(a => a.key === valueKey)?.value;
+      const num = raw == null || raw === '' ? NaN : Number(raw);
+      if (!isFinite(num) || num <= 0) return null;
+      const unitRaw = allAttrs.find(a => a.key === unitKey)?.value;
+      const unit: DelayUnit = unitRaw === 'SECONDS' || unitRaw === 'HOURS' ? unitRaw : 'MINUTES';
+      return { value: num, unit };
+    };
+
+    const delay = this.cfService.extractDelay(deviceCfs, config.thresholds)
+      ?? storedDelay('alarmDelayValue', 'alarmDelayUnit');
     attributes['alarmDelay'] = this.cfService.formatDelayLabel(delay);
     attributes['alarmDelayValue'] = delay?.value ?? null;
     attributes['alarmDelayUnit'] = delay?.unit ?? null;
 
-    const digitalDelay = this.cfService.extractDigitalDelay(deviceCfs, config.digitals || []);
+    const digitalDelay = this.cfService.extractDigitalDelay(deviceCfs, config.digitals || [])
+      ?? storedDelay('alarmDigitalDelayValue', 'alarmDigitalDelayUnit');
     attributes['alarmDigitalDelay'] = this.cfService.formatDelayLabel(digitalDelay);
     attributes['alarmDigitalDelayValue'] = digitalDelay?.value ?? null;
     attributes['alarmDigitalDelayUnit'] = digitalDelay?.unit ?? null;
